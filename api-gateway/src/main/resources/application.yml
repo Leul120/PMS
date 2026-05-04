@@ -1,0 +1,61 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=0
+        - id: vendor-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/vendors/**
+          filters:
+            - StripPrefix=0
+        - id: rfq-bidding-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/rfqs/**,/api/bids/**
+          filters:
+            - StripPrefix=0
+        - id: procurement-service
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/purchase-orders/**
+          filters:
+            - StripPrefix=0
+        - id: delivery-invoice-service
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/deliveries/**,/api/invoices/**
+          filters:
+            - StripPrefix=0
+        - id: scoring-service
+          uri: http://localhost:8086
+          predicates:
+            - Path=/api/scores/**
+          filters:
+            - StripPrefix=0
+        - id: analytics-service
+          uri: http://localhost:8087
+          predicates:
+            - Path=/api/reports/**,/api/dashboard/**
+          filters:
+            - StripPrefix=0
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG

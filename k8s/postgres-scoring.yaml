@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-scoring-pvc
+  namespace: procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-scoring
+  namespace: procurement
+spec:
+  serviceName: postgres-scoring
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-scoring
+  template:
+    metadata:
+      labels:
+        app: postgres-scoring
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: scoringdb
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: scoring-db-password
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-scoring-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-scoring
+  namespace: procurement
+spec:
+  selector:
+    app: postgres-scoring
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

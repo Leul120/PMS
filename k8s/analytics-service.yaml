@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: procurement
+  labels:
+    app: analytics-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+    spec:
+      containers:
+        - name: analytics-service
+          image: procurement/analytics-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8087
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-analytics"
+            - name: JWT_PUBLIC_KEY_PATH
+              value: "file:/etc/jwt-keys/jwt-public.key"
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /etc/jwt-keys
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8087
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8087
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: jwt-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: procurement
+spec:
+  selector:
+    app: analytics-service
+  ports:
+    - port: 8087
+      targetPort: 8087
+  type: ClusterIP

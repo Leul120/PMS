@@ -1,0 +1,676 @@
+# Redis Instances - One Per Service for Complete Isolation
+# This provides complete data isolation between microservices
+
+# ============================================
+# Redis for Auth Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-auth-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    timeout 300
+    tcp-keepalive 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-auth-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-auth
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-auth
+  template:
+    metadata:
+      labels:
+        app: redis-auth
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-auth-data
+        - name: config
+          configMap:
+            name: redis-auth-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-auth
+  namespace: procurement
+spec:
+  selector:
+    app: redis-auth
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Vendor Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-vendor-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-vendor-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-vendor
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-vendor
+  template:
+    metadata:
+      labels:
+        app: redis-vendor
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-vendor-data
+        - name: config
+          configMap:
+            name: redis-vendor-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-vendor
+  namespace: procurement
+spec:
+  selector:
+    app: redis-vendor
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for RFQ Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-rfq-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-rfq-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-rfq
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-rfq
+  template:
+    metadata:
+      labels:
+        app: redis-rfq
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-rfq-data
+        - name: config
+          configMap:
+            name: redis-rfq-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-rfq
+  namespace: procurement
+spec:
+  selector:
+    app: redis-rfq
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Procurement Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-procurement-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-procurement-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-procurement
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-procurement
+  template:
+    metadata:
+      labels:
+        app: redis-procurement
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-procurement-data
+        - name: config
+          configMap:
+            name: redis-procurement-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-procurement
+  namespace: procurement
+spec:
+  selector:
+    app: redis-procurement
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Delivery Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-delivery-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-delivery-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-delivery
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-delivery
+  template:
+    metadata:
+      labels:
+        app: redis-delivery
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-delivery-data
+        - name: config
+          configMap:
+            name: redis-delivery-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-delivery
+  namespace: procurement
+spec:
+  selector:
+    app: redis-delivery
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Scoring Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-scoring-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-scoring-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-scoring
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-scoring
+  template:
+    metadata:
+      labels:
+        app: redis-scoring
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-scoring-data
+        - name: config
+          configMap:
+            name: redis-scoring-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-scoring
+  namespace: procurement
+spec:
+  selector:
+    app: redis-scoring
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Analytics Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-analytics-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-analytics-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-analytics
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-analytics
+  template:
+    metadata:
+      labels:
+        app: redis-analytics
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-analytics-data
+        - name: config
+          configMap:
+            name: redis-analytics-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-analytics
+  namespace: procurement
+spec:
+  selector:
+    app: redis-analytics
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# ============================================
+# Redis for Notification Service
+# ============================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-notification-config
+  namespace: procurement
+data:
+  redis.conf: |
+    maxmemory 64mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    timeout 300
+    protected-mode yes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-notification-data
+  namespace: procurement
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-notification
+  namespace: procurement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-notification
+  template:
+    metadata:
+      labels:
+        app: redis-notification
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-notification-data
+        - name: config
+          configMap:
+            name: redis-notification-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-notification
+  namespace: procurement
+spec:
+  selector:
+    app: redis-notification
+  ports:
+    - port: 6379
+      targetPort: 6379

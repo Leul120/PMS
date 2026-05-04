@@ -1,0 +1,42 @@
+package com.procurement.vendorservice.infrastructure.lock;
+
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Redisson configuration - Vendor Service specific.
+ * Each service can tune its own connection pool settings.
+ */
+@Configuration
+public class RedissonConfig {
+
+    @Value("${spring.data.redis.host:localhost}")
+    private String redisHost;
+
+    @Value("${spring.data.redis.port:6379}")
+    private int redisPort;
+
+    @Bean(destroyMethod = "shutdown")
+    public RedissonClient redissonClient() {
+        Config config = new Config();
+        String address = String.format("redis://%s:%d", redisHost, redisPort);
+
+        config.useSingleServer()
+                .setAddress(address)
+                .setConnectionMinimumIdleSize(5)
+                .setConnectionPoolSize(10)
+                .setConnectTimeout(10000)
+                .setTimeout(3000)
+                .setRetryAttempts(3)
+                .setRetryInterval(1500);
+
+        config.setThreads(4);
+        config.setNettyThreads(8);
+
+        return Redisson.create(config);
+    }
+}

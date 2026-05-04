@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scoring-service
+  namespace: procurement
+  labels:
+    app: scoring-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scoring-service
+  template:
+    metadata:
+      labels:
+        app: scoring-service
+    spec:
+      containers:
+        - name: scoring-service
+          image: procurement/scoring-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-scoring:5432/scoringdb"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-scoring"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: scoring-db-password
+            - name: JWT_PUBLIC_KEY_PATH
+              value: "file:/etc/jwt-keys/jwt-public.key"
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /etc/jwt-keys
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: jwt-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scoring-service
+  namespace: procurement
+spec:
+  selector:
+    app: scoring-service
+  ports:
+    - port: 8086
+      targetPort: 8086
+  type: ClusterIP

@@ -1,0 +1,502 @@
+version: '3.8'
+
+services:
+  # Redis instances - one per service for complete isolation
+  redis-auth:
+    image: redis:7-alpine
+    container_name: redis-auth
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-auth-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-vendor:
+    image: redis:7-alpine
+    container_name: redis-vendor
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis-vendor-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-rfq:
+    image: redis:7-alpine
+    container_name: redis-rfq
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis-rfq-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-procurement:
+    image: redis:7-alpine
+    container_name: redis-procurement
+    ports:
+      - "6383:6379"
+    volumes:
+      - redis-procurement-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-delivery:
+    image: redis:7-alpine
+    container_name: redis-delivery
+    ports:
+      - "6384:6379"
+    volumes:
+      - redis-delivery-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-scoring:
+    image: redis:7-alpine
+    container_name: redis-scoring
+    ports:
+      - "6385:6379"
+    volumes:
+      - redis-scoring-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-analytics:
+    image: redis:7-alpine
+    container_name: redis-analytics
+    ports:
+      - "6386:6379"
+    volumes:
+      - redis-analytics-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  redis-notification:
+    image: redis:7-alpine
+    container_name: redis-notification
+    ports:
+      - "6387:6379"
+    volumes:
+      - redis-notification-data:/data
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - procurement-network
+
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - procurement-network
+
+  # PostgreSQL for auth-service
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # PostgreSQL for vendor-service
+  postgres-vendor:
+    image: postgres:15-alpine
+    container_name: postgres-vendor
+    environment:
+      POSTGRES_DB: vendordb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - vendor-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # PostgreSQL for rfq-bidding-service
+  postgres-rfq:
+    image: postgres:15-alpine
+    container_name: postgres-rfq
+    environment:
+      POSTGRES_DB: rfqdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5434:5432"
+    volumes:
+      - rfq-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # PostgreSQL for procurement-service
+  postgres-procurement:
+    image: postgres:15-alpine
+    container_name: postgres-procurement
+    environment:
+      POSTGRES_DB: procurementdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5435:5432"
+    volumes:
+      - procurement-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # PostgreSQL for delivery-invoice-service
+  postgres-delivery:
+    image: postgres:15-alpine
+    container_name: postgres-delivery
+    environment:
+      POSTGRES_DB: deliverydb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5436:5432"
+    volumes:
+      - delivery-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # PostgreSQL for scoring-service
+  postgres-scoring:
+    image: postgres:15-alpine
+    container_name: postgres-scoring
+    environment:
+      POSTGRES_DB: scoringdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5437:5432"
+    volumes:
+      - scoring-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - VENDOR_SERVICE_URL=http://vendor-service:8082
+      - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
+      - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
+      - DELIVERY_SERVICE_URL=http://delivery-invoice-service:8085
+      - SCORING_SERVICE_URL=http://scoring-service:8086
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8087
+      - INVENTORY_SERVICE_URL=http://inventory-service:8088
+    depends_on:
+      - auth-service
+      - vendor-service
+      - rfq-bidding-service
+      - procurement-service
+      - delivery-invoice-service
+      - scoring-service
+    networks:
+      - procurement-network
+
+  # Auth Service
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-auth:5432/authdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-auth
+      - REDIS_PORT=6379
+      # RS256 Asymmetric JWT Configuration
+      - JWT_EXPIRATION=28800000
+      - JWT_PRIVATE_KEY_PATH=file:/app/keys/jwt-private.key
+      - JWT_PUBLIC_KEY_PATH=file:/app/keys/jwt-public.key
+    volumes:
+      # Mount RSA keys for development (keys embedded in image for production)
+      - ./auth-service/src/main/resources/keys:/app/keys:ro
+    depends_on:
+      - postgres-auth
+      - kafka
+      - redis-auth
+    networks:
+      - procurement-network
+
+  # Vendor Service
+  vendor-service:
+    build: ./vendor-service
+    container_name: vendor-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-vendor:5432/vendordb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-vendor
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+    depends_on:
+      - postgres-vendor
+      - kafka
+      - redis-vendor
+      - auth-service
+    networks:
+      - procurement-network
+
+  # RFQ Bidding Service
+  rfq-bidding-service:
+    build: ./rfq-bidding-service
+    container_name: rfq-bidding-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-rfq:5432/rfqdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-rfq
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - VENDOR_SERVICE_URL=http://vendor-service:8082
+    depends_on:
+      - postgres-rfq
+      - kafka
+      - redis-rfq
+      - auth-service
+      - vendor-service
+    networks:
+      - procurement-network
+
+  # Procurement Service
+  procurement-service:
+    build: ./procurement-service
+    container_name: procurement-service
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-procurement:5432/procurementdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-procurement
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
+    depends_on:
+      - postgres-procurement
+      - kafka
+      - redis-procurement
+      - auth-service
+      - rfq-bidding-service
+    networks:
+      - procurement-network
+
+  # Delivery Invoice Service
+  delivery-invoice-service:
+    build: ./delivery-invoice-service
+    container_name: delivery-invoice-service
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-delivery:5432/deliverydb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-delivery
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
+    depends_on:
+      - postgres-delivery
+      - kafka
+      - redis-delivery
+      - auth-service
+      - procurement-service
+    networks:
+      - procurement-network
+
+  # Scoring Service
+  scoring-service:
+    build: ./scoring-service
+    container_name: scoring-service
+    ports:
+      - "8086:8086"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-scoring:5432/scoringdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-scoring
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+    depends_on:
+      - postgres-scoring
+      - kafka
+      - redis-scoring
+      - auth-service
+      - delivery-invoice-service
+    networks:
+      - procurement-network
+
+  # PostgreSQL for Inventory
+  postgres-inventory:
+    image: postgres:15-alpine
+    container_name: postgres-inventory
+    environment:
+      POSTGRES_DB: inventorydb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5438:5432"
+    volumes:
+      - inventory-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
+  # Inventory Service
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    ports:
+      - "8088:8088"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-inventory:5432/inventorydb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
+      - AUTH_SERVICE_URL=http://auth-service:8081
+    depends_on:
+      - postgres-inventory
+      - auth-service
+    networks:
+      - procurement-network
+
+  # Analytics Service
+  analytics-service:
+    build: ./analytics-service
+    container_name: analytics-service
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - REDIS_HOST=redis-analytics
+      - REDIS_PORT=6379
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - VENDOR_SERVICE_URL=http://vendor-service:8082
+      - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
+      - SCORING_SERVICE_URL=http://scoring-service:8086
+      - DELIVERY_SERVICE_URL=http://delivery-invoice-service:8085
+    depends_on:
+      - redis-analytics
+      - auth-service
+      - vendor-service
+      - procurement-service
+      - scoring-service
+      - delivery-invoice-service
+    networks:
+      - procurement-network
+
+  # Notification Service
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    ports:
+      - "8089:8089"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis-notification
+      - REDIS_PORT=6379
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=your-email@gmail.com
+      - SMTP_PASSWORD=your-app-password
+    depends_on:
+      - kafka
+      - redis-notification
+    networks:
+      - procurement-network
+
+  # Frontend (Next.js)
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8080
+    depends_on:
+      - api-gateway
+    networks:
+      - procurement-network
+
+volumes:
+  redis-auth-data:
+  redis-vendor-data:
+  redis-rfq-data:
+  redis-procurement-data:
+  redis-delivery-data:
+  redis-scoring-data:
+  redis-analytics-data:
+  redis-notification-data:
+  auth-data:
+  vendor-data:
+  rfq-data:
+  procurement-data:
+  delivery-data:
+  scoring-data:
+  inventory-data:
+
+networks:
+  procurement-network:
+    driver: bridge

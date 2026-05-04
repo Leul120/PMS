@@ -1,0 +1,165 @@
+# Docker-specific API Gateway configuration with Redis rate limiting
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  cloud:
+    gateway:
+      # RequestRateLimiter filter with Redis
+      default-filters:
+        # Global rate limit: 100 requests per minute per IP
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 150
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@ipKeyResolver}"
+      routes:
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=0
+            # Auth-specific rate limit: higher for login/refresh
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 50
+                key-resolver: "#{@ipKeyResolver}"
+
+        - id: vendor-service
+          uri: http://vendor-service:8082
+          predicates:
+            - Path=/api/vendors/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: rfq-bidding-service
+          uri: http://rfq-bidding-service:8083
+          predicates:
+            - Path=/api/rfqs/**,/api/bids/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: procurement-service
+          uri: http://procurement-service:8084
+          predicates:
+            - Path=/api/purchase-orders/**,/api/procurement/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: delivery-invoice-service
+          uri: http://delivery-invoice-service:8085
+          predicates:
+            - Path=/api/deliveries/**,/api/invoices/**,/api/threewaymatch/**,/api/disputes/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 40
+                redis-rate-limiter.burstCapacity: 80
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: scoring-service
+          uri: http://scoring-service:8086
+          predicates:
+            - Path=/api/scores/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: analytics-service
+          uri: http://analytics-service:8087
+          predicates:
+            - Path=/api/reports/**,/api/dashboard/**
+          filters:
+            - StripPrefix=0
+            # Analytics: lower rate limit due to heavy queries
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: inventory-service
+          uri: http://inventory-service:8088
+          predicates:
+            - Path=/api/inventory/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                key-resolver: "#{@userKeyResolver}"
+
+        - id: notification-service
+          uri: http://notification-service:8089
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@userKeyResolver}"
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders: "X-RateLimit-Limit,X-RateLimit-Remaining,X-RateLimit-Reset,Retry-After"
+
+# Resilience4j Circuit Breaker configuration
+circuitbreaker:
+  configs:
+    default:
+      slidingWindowSize: 100
+      minimumNumberOfCalls: 10
+      permittedNumberOfCallsInHalfOpenState: 10
+      waitDurationInOpenState: 10000
+      failureRateThreshold: 50
+      eventConsumerBufferSize: 10
+
+# Logging
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.procurement.shared.ratelimit: DEBUG
+    io.github.resilience4j: DEBUG

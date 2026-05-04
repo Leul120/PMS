@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: procurement
+
+resources:
+  - namespace.yaml
+  - secrets.yaml
+  - configmap.yaml
+  - redis-services.yaml
+  - postgres-auth.yaml
+  - postgres-vendor.yaml
+  - postgres-rfq.yaml
+  - postgres-procurement.yaml
+  - postgres-delivery.yaml
+  - postgres-scoring.yaml
+  - kafka.yaml
+  - auth-service.yaml
+  - vendor-service.yaml
+  - rfq-bidding-service.yaml
+  - procurement-service.yaml
+  - delivery-invoice-service.yaml
+  - scoring-service.yaml
+  - analytics-service.yaml
+  - notification-service.yaml
+  - api-gateway.yaml
+  - metallb.yaml
+  - ingress.yaml
+
+commonLabels:
+  environment: production
+  project: procurement
+
+images:
+  - name: procurement/auth-service
+    newTag: latest
+  - name: procurement/vendor-service
+    newTag: latest
+  - name: procurement/rfq-bidding-service
+    newTag: latest
+  - name: procurement/procurement-service
+    newTag: latest
+  - name: procurement/delivery-invoice-service
+    newTag: latest
+  - name: procurement/scoring-service
+    newTag: latest
+  - name: procurement/analytics-service
+    newTag: latest
+  - name: procurement/notification-service
+    newTag: latest
+  - name: procurement/api-gateway
+    newTag: latest

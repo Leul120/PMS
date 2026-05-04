@@ -1,0 +1,107 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: procurement-ingress
+  namespace: procurement
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.procurement.local
+      secretName: procurement-tls
+  rules:
+    - host: api.procurement.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 80
+
+---
+# Alternative: Path-based routing without host
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: procurement-ingress-paths
+  namespace: procurement
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8081
+          - path: /api/vendors
+            pathType: Prefix
+            backend:
+              service:
+                name: vendor-service
+                port:
+                  number: 8082
+          - path: /api/rfqs
+            pathType: Prefix
+            backend:
+              service:
+                name: rfq-bidding-service
+                port:
+                  number: 8083
+          - path: /api/bids
+            pathType: Prefix
+            backend:
+              service:
+                name: rfq-bidding-service
+                port:
+                  number: 8083
+          - path: /api/purchase-orders
+            pathType: Prefix
+            backend:
+              service:
+                name: procurement-service
+                port:
+                  number: 8084
+          - path: /api/deliveries
+            pathType: Prefix
+            backend:
+              service:
+                name: delivery-invoice-service
+                port:
+                  number: 8085
+          - path: /api/invoices
+            pathType: Prefix
+            backend:
+              service:
+                name: delivery-invoice-service
+                port:
+                  number: 8085
+          - path: /api/scores
+            pathType: Prefix
+            backend:
+              service:
+                name: scoring-service
+                port:
+                  number: 8086
+          - path: /api/analytics
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-service
+                port:
+                  number: 8087

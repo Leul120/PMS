@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+    --primary: 147 42% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 147 20% 96%;
+    --secondary-foreground: 147 40% 20%;
+    --muted: 147 10% 96%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 147 30% 94%;
+    --accent-foreground: 147 40% 20%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 147 20% 90%;
+    --input: 147 20% 90%;
+    --ring: 147 42% 58%;
+    --radius: 0.75rem;
+    --success: 147 50% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 220 20% 8%;
+    --foreground: 0 0% 98%;
+    --card: 220 15% 12%;
+    --card-foreground: 0 0% 98%;
+    --popover: 220 15% 12%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 147 42% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 147 15% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 147 10% 18%;
+    --muted-foreground: 220 10% 65%;
+    --accent: 147 15% 20%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 147 15% 20%;
+    --input: 147 15% 20%;
+    --ring: 147 42% 58%;
+    --success: 147 45% 50%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 80% 55%;
+    --warning-foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground tracking-tight;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+  h1 { @apply text-2xl leading-tight; }
+  h2 { @apply text-xl leading-tight; }
+  h3 { @apply text-lg leading-snug; }
+  h4 { @apply text-base leading-snug; }
+  p { @apply leading-relaxed; }
+}

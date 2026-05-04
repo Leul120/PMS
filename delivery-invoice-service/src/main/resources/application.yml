@@ -1,0 +1,26 @@
+server:
+  port: 8085
+spring:
+  application:
+    name: delivery-invoice-service
+  datasource:
+    url: jdbc:postgresql://localhost:5436/deliverydb
+    username: postgres
+    password: secret
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: delivery-service-group
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000
+      database: 0

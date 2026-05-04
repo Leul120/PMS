@@ -1,0 +1,91 @@
+# Kubernetes-specific configuration with load-balanced service discovery
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # Enable service discovery for load balancing
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        # Use lb:// prefix for load-balanced routing via Kubernetes DNS
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=0
+        - id: vendor-service
+          uri: lb://vendor-service
+          predicates:
+            - Path=/api/vendors/**
+          filters:
+            - StripPrefix=0
+        - id: rfq-bidding-service
+          uri: lb://rfq-bidding-service
+          predicates:
+            - Path=/api/rfqs/**,/api/bids/**
+          filters:
+            - StripPrefix=0
+        - id: procurement-service
+          uri: lb://procurement-service
+          predicates:
+            - Path=/api/purchase-orders/**
+          filters:
+            - StripPrefix=0
+        - id: delivery-invoice-service
+          uri: lb://delivery-invoice-service
+          predicates:
+            - Path=/api/deliveries/**,/api/invoices/**
+          filters:
+            - StripPrefix=0
+        - id: scoring-service
+          uri: lb://scoring-service
+          predicates:
+            - Path=/api/scores/**
+          filters:
+            - StripPrefix=0
+        - id: analytics-service
+          uri: lb://analytics-service
+          predicates:
+            - Path=/api/reports/**,/api/dashboard/**
+          filters:
+            - StripPrefix=0
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=0
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+# Kubernetes client configuration
+kubernetes:
+  client:
+    namespace: procurement
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.cloud.kubernetes: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always

@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-rfq-pvc
+  namespace: procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-rfq
+  namespace: procurement
+spec:
+  serviceName: postgres-rfq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-rfq
+  template:
+    metadata:
+      labels:
+        app: postgres-rfq
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: rfqdb
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: rfq-db-password
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-rfq-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-rfq
+  namespace: procurement
+spec:
+  selector:
+    app: postgres-rfq
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

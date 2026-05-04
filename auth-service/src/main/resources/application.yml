@@ -1,0 +1,52 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authdb
+    username: postgres
+    password: secret
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000
+      database: 0
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: auth-service-group
+      auto-offset-reset: earliest
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.procurement.*"
+
+# JWT Configuration - RS256 Asymmetric Encryption
+# Private key: Used only by auth-service to sign tokens
+# Public key: Can be shared with other services for token verification
+jwt:
+  expiration: ${JWT_EXPIRATION:28800000}
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt-private.key}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt-public.key}
+
+logging:
+  level:
+    com.procurement: DEBUG
+    org.springframework.security: DEBUG

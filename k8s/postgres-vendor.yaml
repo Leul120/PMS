@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-vendor-pvc
+  namespace: procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-vendor
+  namespace: procurement
+spec:
+  serviceName: postgres-vendor
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-vendor
+  template:
+    metadata:
+      labels:
+        app: postgres-vendor
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: vendordb
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: vendor-db-password
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: postgres-vendor-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-vendor
+  namespace: procurement
+spec:
+  selector:
+    app: postgres-vendor
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

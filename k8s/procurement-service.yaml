@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: procurement-service
+  namespace: procurement
+  labels:
+    app: procurement-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: procurement-service
+  template:
+    metadata:
+      labels:
+        app: procurement-service
+    spec:
+      containers:
+        - name: procurement-service
+          image: procurement/procurement-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-procurement:5432/procurementdb"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-procurement"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: procurement-db-password
+            - name: JWT_PUBLIC_KEY_PATH
+              value: "file:/etc/jwt-keys/jwt-public.key"
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /etc/jwt-keys
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: jwt-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: procurement-service
+  namespace: procurement
+spec:
+  selector:
+    app: procurement-service
+  ports:
+    - port: 8084
+      targetPort: 8084
+  type: ClusterIP

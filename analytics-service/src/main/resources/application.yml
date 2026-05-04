@@ -1,0 +1,16 @@
+server:
+  port: 8087
+spring:
+  application:
+    name: analytics-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: analytics-service-group
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000
+      database: 0

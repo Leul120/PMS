@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: procurement
+  labels:
+    app: notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: procurement/notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8088
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis-notification"
+            - name: JWT_PUBLIC_KEY_PATH
+              value: "file:/etc/jwt-keys/jwt-public.key"
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /etc/jwt-keys
+              readOnly: true
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8088
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8088
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: jwt-keys
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: procurement
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 8088
+      targetPort: 8088
+  type: ClusterIP
