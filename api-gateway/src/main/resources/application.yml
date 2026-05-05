@@ -8,45 +8,57 @@ spring:
     gateway:
       routes:
         - id: auth-service
-          uri: http://localhost:8081
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/auth/**
           filters:
             - StripPrefix=0
         - id: vendor-service
-          uri: http://localhost:8082
+          uri: ${VENDOR_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/vendors/**
           filters:
             - StripPrefix=0
         - id: rfq-bidding-service
-          uri: http://localhost:8083
+          uri: ${RFQ_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/rfqs/**,/api/bids/**
           filters:
             - StripPrefix=0
         - id: procurement-service
-          uri: http://localhost:8084
+          uri: ${PROCUREMENT_SERVICE_URL:http://localhost:8084}
           predicates:
-            - Path=/api/purchase-orders/**
+            - Path=/api/purchase-orders/**,/api/procurement/**
           filters:
             - StripPrefix=0
         - id: delivery-invoice-service
-          uri: http://localhost:8085
+          uri: ${DELIVERY_INVOICE_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/deliveries/**,/api/invoices/**
           filters:
             - StripPrefix=0
         - id: scoring-service
-          uri: http://localhost:8086
+          uri: ${SCORING_SERVICE_URL:http://localhost:8086}
           predicates:
             - Path=/api/scores/**
           filters:
             - StripPrefix=0
         - id: analytics-service
-          uri: http://localhost:8087
+          uri: ${ANALYTICS_SERVICE_URL:http://localhost:8087}
           predicates:
             - Path=/api/reports/**,/api/dashboard/**
+          filters:
+            - StripPrefix=0
+        - id: inventory-service
+          uri: ${INVENTORY_SERVICE_URL:http://localhost:8088}
+          predicates:
+            - Path=/api/inventory/**
+          filters:
+            - StripPrefix=0
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8089}
+          predicates:
+            - Path=/api/notifications/**
           filters:
             - StripPrefix=0
       globalcors:

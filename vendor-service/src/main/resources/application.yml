@@ -21,7 +21,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -31,10 +31,31 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 2000
       database: 0
+  cloud:
+    kubernetes:
+      discovery:
+        enabled: true
+        all-namespaces: false
+      loadbalancer:
+        mode: service
 
-auth:
-  service:
-    url: http://localhost:8081
+# Service URLs
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+
+# Resilience4j Circuit Breaker
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      authService:
+        baseConfig: default
 
 logging:
   level:

@@ -21,7 +21,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FileText, Trash2, Download } from "lucide-react";
+
+// Common vendor document types
+const DOCUMENT_TYPES = [
+  { value: "ISO 9001 Certificate", label: "ISO 9001 Certificate" },
+  { value: "ISO 14001 Certificate", label: "ISO 14001 Certificate" },
+  { value: "Business License", label: "Business License" },
+  { value: "Tax Registration", label: "Tax Registration" },
+  { value: "Insurance Certificate", label: "Insurance Certificate" },
+  { value: "Safety Certificate", label: "Safety Certificate" },
+  { value: "Quality Assurance", label: "Quality Assurance" },
+  { value: "Environmental Compliance", label: "Environmental Compliance" },
+  { value: "Financial Statement", label: "Financial Statement" },
+  { value: "Bank Reference", label: "Bank Reference" },
+  { value: "Trade License", label: "Trade License" },
+  { value: "Other", label: "Other" },
+];
 
 interface Vendor {
   id: string;
@@ -133,14 +156,22 @@ export function VendorDocumentDialog({ open, onOpenChange, vendor, onSuccess }: 
         <form onSubmit={handleSubmit} className="space-y-4 border-b pb-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="docType">Document Type</Label>
-              <Input
-                id="docType"
-                placeholder="e.g., ISO Certificate, Tax Document"
+              <Label htmlFor="docType">Document Type *</Label>
+              <Select
                 value={formData.documentType}
-                onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
-                required
-              />
+                onValueChange={(value) => setFormData({ ...formData, documentType: value })}
+              >
+                <SelectTrigger id="docType">
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="docName">Document Name</Label>

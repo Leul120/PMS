@@ -54,9 +54,12 @@ interface PurchaseOrder {
 
 export default function ProcurementPage() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -68,11 +71,56 @@ export default function ProcurementPage() {
       setLoading(true);
       const data = await poApi.getAll();
       setPurchaseOrders(data);
+      setFilteredOrders(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load purchase orders");
     } finally {
       setLoading(false);
     }
+  }
+
+  // Filter orders based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredOrders(purchaseOrders);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredOrders(
+        purchaseOrders.filter(
+          (po) =>
+            po.poNumber?.toLowerCase().includes(query) ||
+            po.vendorName?.toLowerCase().includes(query) ||
+            po.description?.toLowerCase().includes(query) ||
+            po.status?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, purchaseOrders]);
+
+  // Export purchase orders to CSV
+  function handleExport() {
+    const headers = ["PO Number", "Description", "Vendor", "Status", "Priority", "Total Amount", "Created At", "Delivery Date"];
+    const rows = filteredOrders.map(po => [
+      po.poNumber,
+      po.description || po.title || "",
+      po.vendorName || "",
+      po.status,
+      po.priority || "",
+      po.totalAmount?.toString() || "0",
+      po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "",
+      po.deliveryDate ? new Date(po.deliveryDate).toLocaleDateString() : ""
+    ]);
+    
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `purchase-orders-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: "Export Complete", description: `${filteredOrders.length} orders exported to CSV` });
   }
 
   async function handleApprove(id: string) {
@@ -110,7 +158,7 @@ export default function ProcurementPage() {
             <p className="text-xs text-gray-500 mt-0.5">Create and approve purchase orders</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Export", description: "Export feature coming soon!" })}>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
               <Download className="mr-1.5 h-3.5 w-3.5" />
               Export
             </Button>
@@ -178,6 +226,8 @@ export default function ProcurementPage() {
                     <Input
                       type="search"
                       placeholder="Search POs..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-8 w-full sm:w-[300px]"
                     />
                   </div>
@@ -206,14 +256,14 @@ export default function ProcurementPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {purchaseOrders.length === 0 ? (
+                      {filteredOrders.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                             No purchase orders found. Create your first PO to get started.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        purchaseOrders.map((po) => (
+                        filteredOrders.map((po) => (
                           <TableRow key={po.id}>
                             <TableCell className="font-medium">{po.poNumber}</TableCell>
                             <TableCell>{po.description || po.title || "N/A"}</TableCell>
@@ -235,8 +285,8 @@ export default function ProcurementPage() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => toast({ title: "PO Details", description: `Viewing ${po.poNumber}` })}>View Details</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => toast({ title: "Edit Order", description: `Editing ${po.poNumber} coming soon!` })}>Edit Order</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { setSelectedPO(po); setDialogOpen(true); }}>View Details</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { setSelectedPO(po); setDialogOpen(true); }}>Edit Order</DropdownMenuItem>
                                   {po.status === "PENDING" && (
                                     <>
                                       <DropdownMenuSeparator />

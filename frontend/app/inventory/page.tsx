@@ -5,11 +5,27 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { inventoryApi } from "@/lib/api";
 import { InventoryDialog } from "./inventory-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -47,7 +63,31 @@ export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [adjustQuantity, setAdjustQuantity] = useState(0);
   const { toast } = useToast();
+
+  async function handleAdjustStock() {
+    if (!selectedItem || adjustQuantity === 0) {
+      toast({ title: "Error", description: "Please select an item and enter a quantity", variant: "destructive" });
+      return;
+    }
+    try {
+      await inventoryApi.adjustStock(selectedItem.id, adjustQuantity);
+      toast({ title: "Stock Adjusted", description: `${selectedItem.name} quantity changed by ${adjustQuantity}` });
+      loadInventory();
+      setAdjustDialogOpen(false);
+      setSelectedItem(null);
+      setAdjustQuantity(0);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to adjust stock",
+        variant: "destructive"
+      });
+    }
+  }
 
   async function loadInventory() {
     try {
@@ -67,8 +107,11 @@ export default function InventoryPage() {
         lastUpdated: new Date(item.updatedAt).toLocaleDateString(),
       })));
     } catch (err) {
-      // API may not be available yet
-      console.log("Inventory API not available yet");
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to load inventory data",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -92,7 +135,7 @@ export default function InventoryPage() {
             <p className="text-xs text-gray-500 mt-0.5">Manage stock levels</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Adjust Stock", description: "Stock adjustment form coming soon!" })}>Adjust Stock</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => setAdjustDialogOpen(true)}>Adjust Stock</Button>
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add Item
@@ -153,7 +196,7 @@ export default function InventoryPage() {
                   <TableHead className="text-xs font-medium text-gray-500 py-2">SKU</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 py-2">Category</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 py-2">Location</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Stock</TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 py-2">Stock Level</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 py-2">Updated</TableHead>
                 </TableRow>
@@ -163,28 +206,21 @@ export default function InventoryPage() {
                   const percentage = (item.quantity / item.maxStock) * 100;
                   return (
                     <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.id}</TableCell>
-                      <TableCell>{item.name}</TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell className="font-mono text-xs">{item.sku}</TableCell>
                       <TableCell>{item.category}</TableCell>
+                      <TableCell>{item.location}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Progress 
-                            value={percentage} 
-                            className="w-20"
-                          />
-                          <span className="text-xs">{percentage.toFixed(0)}%</span>
+                          <Progress value={percentage} className="w-20" />
+                          <span className="text-xs">{item.quantity} {item.unit}</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        {item.quantity} {item.unit}
-                      </TableCell>
-                      <TableCell>{item.location}</TableCell>
-                      <TableCell>
                         <Badge 
                           variant={
-                            item.status === "normal" ? "success" : 
-                            item.status === "low" ? "warning" : "destructive"
+                            item.status === "normal" ? "default" : 
+                            item.status === "low" ? "secondary" : "destructive"
                           }
                         >
                           {item.status}
@@ -205,6 +241,55 @@ export default function InventoryPage() {
         onOpenChange={setDialogOpen} 
         onSuccess={loadInventory} 
       />
+
+      {/* Adjust Stock Dialog */}
+      <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Adjust Stock</DialogTitle>
+            <DialogDescription>Update the quantity of an inventory item.</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Item</Label>
+              <Select 
+                value={selectedItem?.id || ""} 
+                onValueChange={(value) => setSelectedItem(inventory.find(i => i.id === value) || null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose an item..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {inventory.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} (Current: {item.quantity})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Quantity Change (+/-)</Label>
+              <Input
+                type="number"
+                value={adjustQuantity}
+                onChange={(e) => setAdjustQuantity(parseInt(e.target.value) || 0)}
+                placeholder="Enter quantity change"
+              />
+              <p className="text-xs text-gray-500">
+                Use positive numbers to add stock, negative to remove.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAdjustStock}>Adjust Stock</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

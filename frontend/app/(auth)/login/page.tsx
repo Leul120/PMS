@@ -11,7 +11,44 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, User } from "@/lib/auth-store";
+import { getDashboardByRole } from "@/components/require-role";
+
+// Map backend login response to frontend User format
+function mapLoginResponse(response: any): User {
+  // Handle null/undefined response
+  if (!response) {
+    return {
+      id: "",
+      userId: "",
+      email: "",
+      firstName: "",
+      lastName: "",
+      fullName: "",
+      role: "VENDOR",
+      roleName: "VENDOR",
+      active: false,
+    };
+  }
+
+  // Backend returns flattened structure: accessToken, tokenType, userId, email, fullName, role
+  const fullName = response.fullName || "";
+  const nameParts = fullName.split(" ");
+  const firstName = nameParts[0] || "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+
+  return {
+    id: String(response.userId || ""),
+    userId: String(response.userId || ""),
+    email: response.email || "",
+    firstName,
+    lastName,
+    fullName,
+    role: (response.role as User["role"]) || "VENDOR",
+    roleName: (response.role as User["roleName"]) || undefined,
+    active: true,
+  };
+}
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -28,12 +65,15 @@ export default function LoginPage() {
 
     try {
       const response = await authApi.login(email, password);
-      setAuth(response.user, response.token);
+      const user = mapLoginResponse(response);
+      setAuth(user, response.accessToken);
       toast({
         title: "Welcome back!",
-        description: `Signed in as ${response.user.firstName} ${response.user.lastName}`,
+        description: `Signed in as ${user.firstName} ${user.lastName}`,
       });
-      router.push("/");
+      // Redirect based on user role
+      const dashboardPath = getDashboardByRole(user.role);
+      router.push(dashboardPath);
     } catch (error) {
       toast({
         title: "Authentication failed",

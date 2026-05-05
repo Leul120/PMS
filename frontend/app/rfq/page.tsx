@@ -24,8 +24,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { rfqApi, bidApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
 import { RFQDialog } from "./rfq-dialog";
 import { 
   Plus, 
@@ -65,11 +82,70 @@ interface Bid {
 
 export default function RFQPage() {
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
+  const [filteredRfqs, setFilteredRfqs] = useState<RFQ[]>([]);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedRfq, setSelectedRfq] = useState<RFQ | null>(null);
+  const [awardDialogOpen, setAwardDialogOpen] = useState(false);
+  const [rfqToAward, setRfqToAward] = useState<RFQ | null>(null);
+  const [bidsToAward, setBidsToAward] = useState<Bid[]>([]);
+  const [selectedBidId, setSelectedBidId] = useState<string>("");
   const { toast } = useToast();
+  const router = useRouter();
+
+  async function handleCloseRfq(rfqId: string) {
+    try {
+      await rfqApi.close(rfqId);
+      toast({ title: "RFQ Closed", description: "The RFQ has been closed successfully." });
+      loadRFQs();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to close RFQ",
+        variant: "destructive"
+      });
+    }
+  }
+
+  async function openAwardDialog(rfq: RFQ) {
+    try {
+      const bidsData = await bidApi.getByRfq(rfq.id) as Bid[];
+      setBidsToAward(bidsData.filter(b => b.status === "SUBMITTED"));
+      setRfqToAward(rfq);
+      setSelectedBidId("");
+      setAwardDialogOpen(true);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to load bids",
+        variant: "destructive"
+      });
+    }
+  }
+
+  async function handleAward() {
+    if (!selectedBidId) {
+      toast({ title: "Error", description: "Please select a bid to award", variant: "destructive" });
+      return;
+    }
+    try {
+      await bidApi.award(selectedBidId);
+      toast({ title: "Contract Awarded", description: "The bid has been awarded successfully." });
+      setAwardDialogOpen(false);
+      setRfqToAward(null);
+      setSelectedBidId("");
+      loadRFQs();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to award contract",
+        variant: "destructive"
+      });
+    }
+  }
 
   useEffect(() => {
     loadRFQs();
@@ -80,12 +156,32 @@ export default function RFQPage() {
       setLoading(true);
       const data = await rfqApi.getAll();
       setRfqs(data);
+      setFilteredRfqs(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load RFQs");
     } finally {
       setLoading(false);
     }
   }
+
+  // Filter RFQs based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRfqs(rfqs);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredRfqs(
+        rfqs.filter(
+          (r) =>
+            r.rfqNumber?.toLowerCase().includes(query) ||
+            r.title?.toLowerCase().includes(query) ||
+            r.description?.toLowerCase().includes(query) ||
+            r.category?.toLowerCase().includes(query) ||
+            r.status?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, rfqs]);
 
   async function loadBids(rfqId: string) {
     try {
@@ -113,7 +209,7 @@ export default function RFQPage() {
             <p className="text-xs text-gray-500 mt-0.5">Manage requests and vendor bids</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Analytics", description: "RFQ analytics coming soon!" })}>Analytics</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => router.push('/analytics')}>Analytics</Button>
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Create RFQ
@@ -176,6 +272,8 @@ export default function RFQPage() {
                     <Input
                       type="search"
                       placeholder="Search RFQs..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-8 w-full sm:w-[300px]"
                     />
                   </div>
@@ -200,7 +298,7 @@ export default function RFQPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {rfqs.map((rfq) => (
+                    {filteredRfqs.map((rfq) => (
                       <TableRow key={rfq.id}>
                         <TableCell className="font-medium">{rfq.id}</TableCell>
                         <TableCell>
@@ -249,12 +347,12 @@ export default function RFQPage() {
                               <DropdownMenuItem onClick={() => loadBids(rfq.id)}>View Bids</DropdownMenuItem>
                               {rfq.status === "open" && (
                                 <>
-                                  <DropdownMenuItem onClick={() => toast({ title: "Close RFQ", description: `Closing ${rfq.title} coming soon!` })}>Close RFQ</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => toast({ title: "Edit RFQ", description: `Editing ${rfq.title} coming soon!` })}>Edit RFQ</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleCloseRfq(rfq.id)}>Close RFQ</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => { setSelectedRfq(rfq); setDialogOpen(true); }}>Edit RFQ</DropdownMenuItem>
                                 </>
                               )}
                               {rfq.status === "evaluating" && (
-                                <DropdownMenuItem onClick={() => toast({ title: "Award Contract", description: `Awarding ${rfq.title} coming soon!` })}>Award Contract</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openAwardDialog(rfq)}>Award Contract</DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -336,6 +434,64 @@ export default function RFQPage() {
         onOpenChange={setDialogOpen} 
         onSuccess={loadRFQs} 
       />
+
+      {/* Award Contract Dialog */}
+      <Dialog open={awardDialogOpen} onOpenChange={setAwardDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Award Contract</DialogTitle>
+            <DialogDescription>
+              Select a bid to award for {rfqToAward?.title}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {bidsToAward.length === 0 ? (
+              <p className="text-muted-foreground">No submitted bids available for this RFQ.</p>
+            ) : (
+              <div className="space-y-2">
+                <Label>Select Bid to Award</Label>
+                <Select value={selectedBidId} onValueChange={setSelectedBidId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a bid..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bidsToAward.map((bid) => (
+                      <SelectItem key={bid.id} value={bid.id}>
+                        {bid.vendorName} - ${bid.bidAmount?.toLocaleString()} ({bid.deliveryTime} days)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {selectedBidId && (
+                  <div className="mt-4 p-3 bg-gray-50 rounded-md">
+                    <p className="text-sm font-medium">Selected Bid Details:</p>
+                    {(() => {
+                      const bid = bidsToAward.find(b => b.id === selectedBidId);
+                      return bid ? (
+                        <div className="mt-2 space-y-1 text-sm">
+                          <p><span className="text-gray-500">Vendor:</span> {bid.vendorName}</p>
+                          <p><span className="text-gray-500">Amount:</span> ${bid.bidAmount?.toLocaleString()}</p>
+                          <p><span className="text-gray-500">Delivery:</span> {bid.deliveryTime}</p>
+                          <p><span className="text-gray-500">Valid for:</span> {bid.validityDays} days</p>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAwardDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAward} disabled={!selectedBidId || bidsToAward.length === 0}>
+              Award Contract
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

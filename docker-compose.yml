@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  # Shared Redis for API Gateway rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-gateway-data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    networks:
+      - procurement-network
+
   # Redis instances - one per service for complete isolation
   redis-auth:
     image: redis:7-alpine
@@ -228,12 +240,16 @@ services:
       - ANALYTICS_SERVICE_URL=http://analytics-service:8087
       - INVENTORY_SERVICE_URL=http://inventory-service:8088
     depends_on:
+      - redis
       - auth-service
       - vendor-service
       - rfq-bidding-service
       - procurement-service
       - delivery-invoice-service
       - scoring-service
+      - analytics-service
+      - inventory-service
+      - notification-service
     networks:
       - procurement-network
 
@@ -445,6 +461,21 @@ services:
     networks:
       - procurement-network
 
+  # PostgreSQL for Notification Service
+  postgres-notification:
+    image: postgres:15-alpine
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: notificationdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5439:5432"
+    volumes:
+      - notification-data:/var/lib/postgresql/data
+    networks:
+      - procurement-network
+
   # Notification Service
   notification-service:
     build: ./notification-service
@@ -453,14 +484,19 @@ services:
       - "8089:8089"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-notification:5432/notificationdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=secret
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_HOST=redis-notification
       - REDIS_PORT=6379
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8089
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
       - SMTP_USERNAME=your-email@gmail.com
       - SMTP_PASSWORD=your-app-password
     depends_on:
+      - postgres-notification
       - kafka
       - redis-notification
     networks:
@@ -481,6 +517,7 @@ services:
       - procurement-network
 
 volumes:
+  redis-gateway-data:
   redis-auth-data:
   redis-vendor-data:
   redis-rfq-data:
@@ -496,6 +533,7 @@ volumes:
   delivery-data:
   scoring-data:
   inventory-data:
+  notification-data:
 
 networks:
   procurement-network:

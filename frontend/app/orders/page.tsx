@@ -54,8 +54,10 @@ interface Order {
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -68,12 +70,32 @@ export default function OrdersPage() {
       setLoading(true);
       const data = await poApi.getAll();
       setOrders(data);
+      setFilteredOrders(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load orders");
     } finally {
       setLoading(false);
     }
   }
+
+  // Filter orders based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredOrders(orders);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredOrders(
+        orders.filter(
+          (o) =>
+            o.poNumber?.toLowerCase().includes(query) ||
+            o.vendorName?.toLowerCase().includes(query) ||
+            o.description?.toLowerCase().includes(query) ||
+            o.status?.toLowerCase().includes(query) ||
+            o.trackingNumber?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, orders]);
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -155,6 +177,8 @@ export default function OrdersPage() {
                     <Input
                       type="search"
                       placeholder="Search orders..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-8 w-full sm:w-[300px]"
                     />
                   </div>
@@ -184,14 +208,14 @@ export default function OrdersPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orders.length === 0 ? (
+                      {filteredOrders.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                             No orders found. Create your first order to get started.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        orders.map((order) => (
+                        filteredOrders.map((order) => (
                           <TableRow key={order.id}>
                             <TableCell className="font-medium">{order.poNumber}</TableCell>
                             <TableCell>{order.description || order.title || "N/A"}</TableCell>

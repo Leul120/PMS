@@ -51,7 +51,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
-  const userRole = user?.roleName as UserRole;
+  const userRole = (user?.role || user?.roleName) as UserRole;
 
   // Filter navigation based on user role
   const allowedNavigation = navigation.filter(item =>
@@ -113,7 +113,7 @@ export function MobileSidebar() {
   const pathname = usePathname();
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
-  const userRole = user?.roleName as UserRole;
+  const userRole = (user?.role || user?.roleName) as UserRole;
 
   // Filter navigation based on user role
   const allowedNavigation = navigation.filter(item =>

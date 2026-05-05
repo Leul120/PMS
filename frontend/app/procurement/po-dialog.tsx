@@ -1,14 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { poApi } from "@/lib/api";
+import { poApi, vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface Vendor {
+  id: string;
+  companyName: string;
+  email: string;
+}
 
 interface PODialogProps {
   open: boolean;
@@ -19,6 +32,8 @@ interface PODialogProps {
 export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -26,6 +41,31 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
     totalAmount: "",
     deliveryDate: "",
   });
+
+  // Load vendors when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadVendors();
+    }
+  }, [open]);
+
+  async function loadVendors() {
+    try {
+      setLoadingVendors(true);
+      const data = await vendorApi.getAll();
+      // Filter for verified/active vendors
+      const activeVendors = data.filter((v: any) => v.status === 'VERIFIED' || v.status === 'ACTIVE');
+      setVendors(activeVendors);
+    } catch (err) {
+      toast({
+        title: "Warning",
+        description: "Could not load vendors. You can still enter the vendor ID manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingVendors(false);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,15 +139,34 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="vendorId">Vendor ID *</Label>
-              <Input
-                id="vendorId"
-                type="number"
-                value={formData.vendorId}
-                onChange={(e) => setFormData({ ...formData, vendorId: e.target.value })}
-                placeholder="Enter vendor ID"
-                required
-              />
+              <Label htmlFor="vendorId">Vendor *</Label>
+              {vendors.length > 0 ? (
+                <Select
+                  value={formData.vendorId}
+                  onValueChange={(value) => setFormData({ ...formData, vendorId: value })}
+                >
+                  <SelectTrigger id="vendorId">
+                    <SelectValue placeholder={loadingVendors ? "Loading..." : "Select a vendor"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.companyName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="vendorId"
+                  type="number"
+                  value={formData.vendorId}
+                  onChange={(e) => setFormData({ ...formData, vendorId: e.target.value })}
+                  placeholder={loadingVendors ? "Loading..." : "Enter vendor ID"}
+                  required
+                  disabled={loadingVendors}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="totalAmount">Total Amount ($) *</Label>

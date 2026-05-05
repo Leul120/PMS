@@ -1,5 +1,6 @@
 // API client for backend integration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+// Use relative /api path so requests go through Next.js rewrites to backend
+const API_BASE_URL = '/api';
 
 // Get auth token from localStorage
 function getToken(): string | null {
@@ -7,6 +8,34 @@ function getToken(): string | null {
     return localStorage.getItem('token');
   }
   return null;
+}
+
+// Get user ID from localStorage
+function getUserId(): string | null {
+  if (typeof window !== 'undefined') {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        return user.id || user.userId || null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+// Handle auth errors by clearing storage and redirecting
+function handleAuthError(status: number) {
+  if (typeof window !== 'undefined') {
+    if (status === 401) {
+      // Token expired or invalid - clear auth and redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+  }
 }
 
 // Generic fetch wrapper
@@ -26,27 +55,59 @@ async function fetchApi<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
   
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-  
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP error! status: ${response.status}`);
+  // Add X-User-Id header for backend services that need it
+  const userId = getUserId();
+  if (userId) {
+    headers['X-User-Id'] = userId;
   }
   
-  if (response.status === 204) {
-    return {} as T;
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    
+    // Handle auth errors
+    if (response.status === 401) {
+      handleAuthError(401);
+      throw new Error('Session expired. Please sign in again.');
+    }
+    
+    if (response.status === 403) {
+      throw new Error('You do not have permission to perform this action.');
+    }
+    
+    if (!response.ok) {
+      // Read body once as text, then try to parse as JSON
+      const bodyText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorJson = JSON.parse(bodyText);
+        errorMessage = errorJson.message || errorJson.error || JSON.stringify(errorJson);
+      } catch {
+        errorMessage = bodyText || `Request failed with status ${response.status}`;
+      }
+      throw new Error(errorMessage);
+    }
+    
+    if (response.status === 204) {
+      return {} as T;
+    }
+    
+    return response.json();
+  } catch (error) {
+    // Re-throw network errors with better message
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 // Auth APIs
 export const authApi = {
   login: (email: string, password: string) =>
-    fetchApi<{ token: string; user: any }>('/auth/login', {
+    fetchApi<{ accessToken: string; tokenType: string; userId: string | number; email: string; fullName: string; role: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -134,6 +195,8 @@ export const vendorApi = {
     }),
   verify: (id: string) =>
     fetchApi(`/vendors/${id}/verify`, { method: 'POST' }),
+  updateStatus: (id: string, status: string) =>
+    fetchApi(`/vendors/${id}/status?status=${status}`, { method: 'PUT' }),
   // Document methods
   getDocuments: (vendorId: string) =>
     fetchApi<any[]>(`/vendors/${vendorId}/documents`),
@@ -191,6 +254,8 @@ export const bidApi = {
     }),
   evaluate: (bidId: string) =>
     fetchApi(`/bids/${bidId}/evaluate`, { method: 'POST' }),
+  award: (bidId: string) =>
+    fetchApi(`/bids/${bidId}/award`, { method: 'POST' }),
 };
 
 // Delivery APIs
@@ -234,6 +299,7 @@ export const analyticsApi = {
   getDashboard: () => fetchApi('/dashboard/overview'),
   getSpendReport: () => fetchApi('/reports/spend'),
   getComplianceReport: () => fetchApi('/reports/compliance'),
+  getActivity: () => fetchApi<any[]>('/analytics/activity'),
   getVendorComparison: (vendorIds: string[]) =>
     fetchApi(`/reports/vendor-comparison?vendorIds=${vendorIds.join(',')}`),
 };
@@ -321,3 +387,14 @@ export const notificationApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// Types
+export interface Vendor {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  status: string;
+  createdAt: string;
+}

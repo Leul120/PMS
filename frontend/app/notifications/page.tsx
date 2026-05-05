@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { notificationApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/lib/auth-store";
 import { 
   Bell, 
   CheckCircle, 
@@ -29,13 +29,14 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
 
   async function loadNotifications() {
     try {
       setLoading(true);
-      if (user?.userId) {
-        const data = await notificationApi.getUserNotifications(user.userId);
+      const userId = user?.userId || user?.id;
+      if (userId) {
+        const data = await notificationApi.getUserNotifications(userId);
         setNotifications(data || []);
       }
     } catch (err) {

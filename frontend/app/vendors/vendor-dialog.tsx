@@ -5,9 +5,26 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+
+// Common vendor categories
+const VENDOR_CATEGORIES = [
+  { id: 1, name: "Technology" },
+  { id: 2, name: "Office Supplies" },
+  { id: 3, name: "Professional Services" },
+  { id: 4, name: "Construction & Maintenance" },
+  { id: 5, name: "Manufacturing" },
+  { id: 6, name: "Marketing & Creative" },
+  { id: 7, name: "Logistics & Transportation" },
+  { id: 8, name: "Facilities Management" },
+  { id: 9, name: "Healthcare" },
+  { id: 10, name: "Financial Services" },
+  { id: 11, name: "Consulting" },
+  { id: 12, name: "Other" },
+];
 
 interface VendorDialogProps {
   open: boolean;
@@ -28,8 +45,21 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     categoryId: "",
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    if (!formData.companyName.trim()) newErrors.companyName = "Company name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email format";
+    if (!formData.contactPerson.trim()) newErrors.contactPerson = "Contact person is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setIsSubmitting(true);
 
     try {
@@ -81,10 +111,14 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             <Input
               id="companyName"
               value={formData.companyName}
-              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, companyName: e.target.value });
+                if (errors.companyName) setErrors({ ...errors, companyName: "" });
+              }}
               placeholder="Enter company name"
-              required
+              className={errors.companyName ? "border-red-500" : ""}
             />
+            {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
           </div>
 
           <div className="space-y-2">
@@ -92,10 +126,14 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             <Input
               id="contactPerson"
               value={formData.contactPerson}
-              onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, contactPerson: e.target.value });
+                if (errors.contactPerson) setErrors({ ...errors, contactPerson: "" });
+              }}
               placeholder="Enter contact person name"
-              required
+              className={errors.contactPerson ? "border-red-500" : ""}
             />
+            {errors.contactPerson && <p className="text-xs text-red-500">{errors.contactPerson}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -105,10 +143,14 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (errors.email) setErrors({ ...errors, email: "" });
+                }}
                 placeholder="vendor@company.com"
-                required
+                className={errors.email ? "border-red-500" : ""}
               />
+              {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="phoneNumber">Phone Number</Label>
@@ -142,14 +184,22 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="categoryId">Category ID</Label>
-              <Input
-                id="categoryId"
-                type="number"
+              <Label htmlFor="categoryId">Category *</Label>
+              <Select
                 value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                placeholder="1"
-              />
+                onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
+              >
+                <SelectTrigger id="categoryId">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VENDOR_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

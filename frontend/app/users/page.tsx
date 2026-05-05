@@ -52,8 +52,10 @@ interface User {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -66,7 +68,7 @@ export default function UsersPage() {
       setLoading(true);
       setError(null);
       const data = await authApi.getAllUsers();
-      setUsers(data.map((user: any) => ({
+      const mappedUsers = data.map((user: any) => ({
         id: user.userId || user.id,
         firstName: user.fullName?.split(' ')[0] || user.firstName || '',
         lastName: user.fullName?.split(' ').slice(1).join(' ') || user.lastName || '',
@@ -74,13 +76,58 @@ export default function UsersPage() {
         role: user.roleName || user.role,
         active: user.active !== false,
         createdAt: user.registrationDate || user.createdAt,
-      })));
+      }));
+      setUsers(mappedUsers);
+      setFilteredUsers(mappedUsers);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load users");
       setUsers([]);
+      setFilteredUsers([]);
     } finally {
       setLoading(false);
     }
+  }
+
+  // Filter users based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredUsers(users);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredUsers(
+        users.filter(
+          (u) =>
+            u.firstName?.toLowerCase().includes(query) ||
+            u.lastName?.toLowerCase().includes(query) ||
+            u.email?.toLowerCase().includes(query) ||
+            u.role?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, users]);
+
+  // Export users to CSV
+  function handleExport() {
+    const headers = ["First Name", "Last Name", "Email", "Role", "Status", "Created At"];
+    const rows = filteredUsers.map(u => [
+      u.firstName,
+      u.lastName,
+      u.email,
+      u.role,
+      u.active ? "Active" : "Inactive",
+      u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ""
+    ]);
+    
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `users-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: "Export Complete", description: `${filteredUsers.length} users exported to CSV` });
   }
   return (
     <DashboardLayout>
@@ -91,7 +138,7 @@ export default function UsersPage() {
             <p className="text-xs text-gray-500 mt-0.5">Manage system users</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Export Users", description: "User export coming soon!" })}>Export</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>Export</Button>
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add User
@@ -135,6 +182,8 @@ export default function UsersPage() {
                 <Input
                   type="search"
                   placeholder="Search users..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8 w-[200px] h-8 text-xs border-gray-200"
                 />
               </div>

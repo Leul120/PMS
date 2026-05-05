@@ -86,6 +86,11 @@ public class NotificationService {
     
     @Transactional
     public NotificationResponse createNotification(NotificationRequest request) {
+        if (request == null) {
+            log.error("Cannot create notification: request is null");
+            throw new IllegalArgumentException("Notification request cannot be null");
+        }
+
         Notification notification = new Notification();
         notification.setUserId(request.getUserId());
         notification.setType(request.getType());
@@ -95,8 +100,12 @@ public class NotificationService {
         notification.setRelatedEntityId(request.getRelatedEntityId());
         notification.setStatus("PENDING");
         notification.setCreatedAt(LocalDateTime.now());
-        
+
         Notification saved = notificationRepository.save(notification);
+        if (saved == null) {
+            log.error("Failed to save notification: repository returned null");
+            throw new RuntimeException("Failed to create notification");
+        }
         log.info("Notification created for user {}: {}", request.getUserId(), request.getTitle());
         return mapToResponse(saved);
     }
@@ -151,6 +160,10 @@ public class NotificationService {
     }
     
     private NotificationResponse mapToResponse(Notification notification) {
+        if (notification == null) {
+            log.error("Cannot map null notification to response");
+            throw new IllegalArgumentException("Notification cannot be null");
+        }
         return NotificationResponse.builder()
             .notificationId(notification.getNotificationId())
             .userId(notification.getUserId())

@@ -6,9 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { rfqApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+
+// Common procurement categories
+const CATEGORIES = [
+  { id: 1, name: "IT Equipment" },
+  { id: 2, name: "Office Supplies" },
+  { id: 3, name: "Professional Services" },
+  { id: 4, name: "Construction" },
+  { id: 5, name: "Manufacturing" },
+  { id: 6, name: "Marketing" },
+  { id: 7, name: "Logistics" },
+  { id: 8, name: "Facilities" },
+  { id: 9, name: "Software" },
+  { id: 10, name: "Other" },
+];
 
 interface RFQDialogProps {
   open: boolean;
@@ -125,14 +140,22 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="categoryId">Category ID</Label>
-              <Input
-                id="categoryId"
-                type="number"
+              <Label htmlFor="categoryId">Category *</Label>
+              <Select
                 value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                placeholder="1"
-              />
+                onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
+              >
+                <SelectTrigger id="categoryId">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="expectedQuantity">Expected Quantity</Label>
@@ -141,7 +164,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
                 type="number"
                 value={formData.expectedQuantity}
                 onChange={(e) => setFormData({ ...formData, expectedQuantity: e.target.value })}
-                placeholder="1"
+                placeholder="e.g., 100"
               />
             </div>
           </div>

@@ -12,8 +12,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { requisitionApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+
+// Common item categories
+const ITEM_CATEGORIES = [
+  { value: "IT Equipment", label: "IT Equipment" },
+  { value: "Office Supplies", label: "Office Supplies" },
+  { value: "Furniture", label: "Furniture" },
+  { value: "Software", label: "Software" },
+  { value: "Services", label: "Services" },
+  { value: "Raw Materials", label: "Raw Materials" },
+  { value: "Marketing", label: "Marketing" },
+  { value: "Maintenance", label: "Maintenance" },
+  { value: "Other", label: "Other" },
+];
 
 interface RequisitionDialogProps {
   open: boolean;
@@ -154,15 +168,25 @@ export function RequisitionDialog({ open, onOpenChange, onSuccess }: Requisition
                   }}
                   required
                 />
-                <Input
-                  placeholder="Category"
+                <Select
                   value={item.category}
-                  onChange={(e) => {
+                  onValueChange={(value) => {
                     const newItems = [...formData.items];
-                    newItems[index].category = e.target.value;
+                    newItems[index].category = value;
                     setFormData({ ...formData, items: newItems });
                   }}
-                />
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ITEM_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ))}
           </div>

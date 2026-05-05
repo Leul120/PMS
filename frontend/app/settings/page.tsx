@@ -46,9 +46,9 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const settings = await settingsApi.getSettings().catch(() => null);
-      const notifications = await settingsApi.getNotifications().catch(() => null);
-      const security = await settingsApi.getSecurity().catch(() => null);
+      const settings = await settingsApi.getSettings().catch(() => null) as any || {};
+      const notifications = await settingsApi.getNotifications().catch(() => null) as any || {};
+      const security = await settingsApi.getSecurity().catch(() => null) as any || {};
 
       if (settings) {
         setCompanyName(settings.companyName || "");

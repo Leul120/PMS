@@ -7,10 +7,13 @@ export type UserRole = "ADMIN" | "OFFICER" | "MANAGER" | "AUDITOR" | "VENDOR";
 
 export interface User {
   id: string;
+  userId: string;
   email: string;
   firstName: string;
   lastName: string;
+  fullName?: string;
   role: UserRole;
+  roleName?: UserRole;
   active: boolean;
 }
 
@@ -148,12 +151,16 @@ export const useAuthStore = create<AuthState>()(
       hasRole: (roles) => {
         const { user } = get();
         if (!user) return false;
-        return roles.includes(user.role);
+        const userRole = user.role || user.roleName;
+        if (!userRole) return false;
+        return roles.includes(userRole);
       },
       hasPermission: (permission) => {
         const { user } = get();
         if (!user) return false;
-        const permissions = rolePermissions[user.role] || [];
+        const userRole = user.role || user.roleName;
+        if (!userRole) return false;
+        const permissions = rolePermissions[userRole] || [];
         return permissions.includes(permission);
       },
     }),

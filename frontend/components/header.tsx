@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bell, Search, User, Settings, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
@@ -17,11 +18,32 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/lib/auth-store";
-import { useToast } from "@/hooks/use-toast";
+import { notificationApi } from "@/lib/api";
 
 export function Header() {
   const { user, logout } = useAuthStore();
-  const { toast } = useToast();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const userId = user?.userId || user?.id;
+    if (!userId) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const notifications = await notificationApi.getUnread(userId);
+        setUnreadCount(notifications.length);
+      } catch (err) {
+        console.error("Failed to fetch notifications:", err);
+      }
+    };
+
+    fetchUnreadCount();
+    // Poll every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [user?.userId, user?.id]);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border/50 bg-background/80 backdrop-blur-xl px-4 sm:px-6">
@@ -32,18 +54,24 @@ export function Header() {
           <Input
             type="search"
             placeholder="Search vendors, orders, RFQs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 h-10 bg-muted/50 border-0 focus-visible:ring-2 focus-visible:ring-primary/50"
           />
         </div>
       </div>
       <div className="flex items-center gap-3">
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl" onClick={() => toast({ title: "Notifications", description: "You have 3 unread notifications" })}>
-            <Bell className="h-5 w-5 text-muted-foreground" />
-            <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-destructive p-0 text-[10px] flex items-center justify-center">
-              3
-            </Badge>
-            <span className="sr-only">Notifications</span>
+          <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl" asChild>
+            <Link href="/notifications">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              {unreadCount > 0 && (
+                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-destructive p-0 text-[10px] flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Badge>
+              )}
+              <span className="sr-only">Notifications</span>
+            </Link>
           </Button>
         </motion.div>
 

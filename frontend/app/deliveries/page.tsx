@@ -50,8 +50,10 @@ interface Delivery {
 
 export default function DeliveriesPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [filteredDeliveries, setFilteredDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -75,11 +77,55 @@ export default function DeliveriesPage() {
           eta: po.deliveryDate,
         }));
       setDeliveries(deliveryItems);
+      setFilteredDeliveries(deliveryItems);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load deliveries");
     } finally {
       setLoading(false);
     }
+  }
+
+  // Filter deliveries based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredDeliveries(deliveries);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredDeliveries(
+        deliveries.filter(
+          (d) =>
+            d.poNumber?.toLowerCase().includes(query) ||
+            d.vendor?.toLowerCase().includes(query) ||
+            d.status?.toLowerCase().includes(query) ||
+            d.trackingNumber?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, deliveries]);
+
+  // Export deliveries to CSV
+  function handleExport() {
+    const headers = ["PO Number", "Vendor", "Status", "Tracking Number", "Delivery Date", "Origin", "Destination"];
+    const rows = filteredDeliveries.map(d => [
+      d.poNumber || d.poId,
+      d.vendor || "N/A",
+      d.status,
+      d.trackingNumber || "",
+      d.deliveryDate ? new Date(d.deliveryDate).toLocaleDateString() : "",
+      d.origin || "Supplier",
+      d.destination || "Main Warehouse"
+    ]);
+    
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `deliveries-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: "Export Complete", description: `${filteredDeliveries.length} deliveries exported to CSV` });
   }
 
   useEffect(() => {
@@ -141,7 +187,7 @@ export default function DeliveriesPage() {
             <p className="text-xs text-gray-500 mt-0.5">Track shipments</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Export Report", description: "Report export coming soon!" })}>Export</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>Export</Button>
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>Update Status</Button>
           </div>
         </div>
@@ -181,6 +227,8 @@ export default function DeliveriesPage() {
               <Input
                 type="search"
                 placeholder="Search deliveries..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 w-[200px] h-8 text-xs border-gray-200"
               />
             </div>
@@ -201,57 +249,67 @@ export default function DeliveriesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deliveries.map((delivery) => (
-                  <TableRow key={delivery.id}>
-                    <TableCell className="font-medium">{delivery.id}</TableCell>
-                    <TableCell>{delivery.poId}</TableCell>
-                    <TableCell>{delivery.vendorName || 'N/A'}</TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={
-                          delivery.status === "delivered" ? "success" : 
-                          delivery.status === "in_transit" ? "warning" : "secondary"
-                        }
-                      >
-                        {delivery.status.replace("_", " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress value={delivery.progress} className="w-20" />
-                        <span className="text-sm">{delivery.progress}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <MapPin className="h-3 w-3" />
-                        {delivery.origin} → {delivery.destination}
-                      </div>
-                    </TableCell>
-                    <TableCell>{delivery.carrier}</TableCell>
-                    <TableCell>{delivery.eta}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleThreeWayMatch(delivery.poId, delivery.id, delivery.id, delivery.quantity || 0, delivery.quantity || 0)}
-                          title="3-Way Match"
-                        >
-                          <Scale className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleRaiseDispute(delivery.poId, delivery.id, 'DELIVERY_ISSUE', 'Delivery issue reported')}
-                          title="Raise Dispute"
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
-                      </div>
+                {filteredDeliveries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-gray-500 text-xs">
+                      No deliveries found.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredDeliveries.map((delivery) => (
+                    <TableRow key={delivery.id}>
+                      <TableCell className="font-medium">{delivery.id}</TableCell>
+                      <TableCell>{delivery.poId}</TableCell>
+                      <TableCell>{delivery.vendorName || delivery.vendor || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={
+                            delivery.status?.toLowerCase() === "delivered" ? "default" : 
+                            delivery.status?.toLowerCase() === "in_transit" ? "secondary" : "outline"
+                          }
+                        >
+                          {delivery.status?.replace("_", " ") || 'Unknown'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={delivery.progress || 0} className="w-20" />
+                          <span className="text-xs">{delivery.progress || 0}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-xs">
+                          <MapPin className="h-3 w-3" />
+                          {delivery.origin || 'Supplier'} → {delivery.destination || 'Warehouse'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs">{delivery.carrier || 'N/A'}</TableCell>
+                      <TableCell className="text-xs">{delivery.eta || delivery.deliveryDate || 'N/A'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleThreeWayMatch(delivery.poId, delivery.id, delivery.id, delivery.quantity || 0, delivery.quantity || 0)}
+                            title="3-Way Match"
+                          >
+                            <Scale className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleRaiseDispute(delivery.poId, delivery.id, 'DELIVERY_ISSUE', 'Delivery issue reported')}
+                            title="Raise Dispute"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

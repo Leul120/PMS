@@ -26,6 +26,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { vendorApi, scoringApi } from "@/lib/api";
 import { VendorDocumentDialog } from "./vendor-document-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
 import { VendorDialog } from "./vendor-dialog";
 import { 
   Search, 
@@ -37,7 +38,11 @@ import {
   Download,
   Building2,
   Loader2,
-  FileText
+  FileText,
+  Eye,
+  Edit,
+  ShoppingCart,
+  Ban
 } from "lucide-react";
 
 interface Vendor {
@@ -64,6 +69,7 @@ export default function VendorsPage() {
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     loadVendors();
@@ -98,6 +104,33 @@ export default function VendorsPage() {
       );
     }
   }, [searchQuery, vendors]);
+
+  // Export vendors to CSV
+  function handleExport() {
+    const headers = ["Company Name", "Email", "Phone", "Category", "Status", "Verified", "Rating", "Total Orders", "Compliance"];
+    const rows = filteredVendors.map(v => [
+      v.companyName,
+      v.email,
+      v.phone || "",
+      v.category || "",
+      v.status,
+      v.verified ? "Yes" : "No",
+      v.rating || "",
+      v.totalOrders || "",
+      v.compliance || ""
+    ]);
+    
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vendors-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: "Export Complete", description: `${filteredVendors.length} vendors exported to CSV` });
+  }
   return (
     <DashboardLayout>
       <div className="space-y-4">
@@ -107,7 +140,7 @@ export default function VendorsPage() {
             <p className="text-xs text-gray-500 mt-0.5">Manage vendor relationships</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => toast({ title: "Export Report", description: "Report export coming soon!" })}>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Export
             </Button>
@@ -250,9 +283,14 @@ export default function VendorsPage() {
                             <DropdownMenuContent align="end" className="text-xs">
                               <DropdownMenuLabel className="text-xs">Actions</DropdownMenuLabel>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Vendor Details", description: `Viewing ${vendor.companyName}` })}>View Details</DropdownMenuItem>
-                              <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "Edit Vendor", description: `Editing ${vendor.companyName} coming soon!` })}>Edit Vendor</DropdownMenuItem>
-                              <DropdownMenuItem className="text-xs" onClick={() => toast({ title: "View Orders", description: `Orders for ${vendor.companyName} coming soon!` })}>View Orders</DropdownMenuItem>
+                              <DropdownMenuItem className="text-xs" onClick={() => { setSelectedVendor(vendor); setDialogOpen(true); }}>
+                                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                View / Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-xs" onClick={() => router.push(`/orders?vendor=${vendor.id}`)}>
+                                <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
+                                View Orders
+                              </DropdownMenuItem>
                               <DropdownMenuItem 
                                 className="text-xs"
                                 onClick={() => {
@@ -281,7 +319,25 @@ export default function VendorsPage() {
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-xs text-red-600" onClick={() => toast({ title: "Deactivate Vendor", description: `Deactivating ${vendor.companyName} coming soon!`, variant: "destructive" })}>
+                              <DropdownMenuItem 
+                                className="text-xs text-red-600" 
+                                onClick={async () => {
+                                  if (confirm(`Are you sure you want to deactivate ${vendor.companyName}?`)) {
+                                    try {
+                                      await vendorApi.updateStatus(vendor.id, "INACTIVE");
+                                      toast({ title: "Vendor deactivated", description: `${vendor.companyName} has been deactivated.` });
+                                      loadVendors();
+                                    } catch (error) {
+                                      toast({ 
+                                        title: "Error", 
+                                        description: error instanceof Error ? error.message : "Failed to deactivate vendor",
+                                        variant: "destructive"
+                                      });
+                                    }
+                                  }
+                                }}
+                              >
+                                <Ban className="h-3.5 w-3.5 mr-1.5" />
                                 Deactivate
                               </DropdownMenuItem>
                             </DropdownMenuContent>

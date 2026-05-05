@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Download, TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
 import { analyticsApi, poApi, rfqApi, vendorApi } from "@/lib/api";
 import { 
   BarChart, 
@@ -99,6 +101,14 @@ function StatCard({ title, value, icon: Icon, loading, color = "gray" }: any) {
   );
 }
 
+interface Activity {
+  id: string;
+  title: string;
+  vendor: string;
+  status: string;
+  time: string;
+}
+
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,10 +116,53 @@ export default function DashboardPage() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [rfqs, setRfqs] = useState<any[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Generate activity feed from POs, RFQs and vendors
+  function generateActivities(pos: any[], rfqList: any[], vendorList: any[]): Activity[] {
+    const activities: Activity[] = [];
+    
+    // Add recent PO activities
+    pos.slice(0, 5).forEach((po, idx) => {
+      activities.push({
+        id: `po-${po.id}-${idx}`,
+        title: `PO ${po.poNumber || po.id} ${po.status?.toLowerCase()}`,
+        vendor: po.vendorName || "Unknown Vendor",
+        status: po.status === "APPROVED" ? "approved" : po.status === "DELIVERED" ? "delivered" : "pending",
+        time: po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "Recently"
+      });
+    });
+    
+    // Add recent RFQ activities
+    rfqList.slice(0, 3).forEach((rfq, idx) => {
+      activities.push({
+        id: `rfq-${rfq.id}-${idx}`,
+        title: `RFQ ${rfq.rfqNumber || rfq.id} created`,
+        vendor: "Procurement Team",
+        status: "pending",
+        time: rfq.createdAt ? new Date(rfq.createdAt).toLocaleDateString() : "Recently"
+      });
+    });
+    
+    // Add vendor activities
+    vendorList.filter(v => v.verified).slice(0, 2).forEach((vendor, idx) => {
+      activities.push({
+        id: `vendor-${vendor.id}-${idx}`,
+        title: `Vendor ${vendor.companyName} verified`,
+        vendor: vendor.companyName,
+        status: "approved",
+        time: "Recently"
+      });
+    });
+    
+    return activities.slice(0, 10);
+  }
 
   async function loadDashboardData() {
     try {
@@ -124,12 +177,42 @@ export default function DashboardPage() {
       setVendors(vendorList);
       setPurchaseOrders(poList);
       setRfqs(rfqList);
+      setActivities(generateActivities(poList, rfqList, vendorList));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleApprovePO(poId: string) {
+    try {
+      await poApi.approve(poId);
+      toast({ title: "Success", description: "Purchase order approved" });
+      loadDashboardData();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to approve PO",
+        variant: "destructive"
+      });
+    }
+  }
+
+  async function handleRejectPO(poId: string) {
+    try {
+      await poApi.reject(poId);
+      toast({ title: "Success", description: "Purchase order rejected" });
+      loadDashboardData();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to reject PO",
+        variant: "destructive"
+      });
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -245,7 +328,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-4">
               <div className="space-y-3">
-                {[].map((activity: any) => (
+                {activities.length === 0 ? (
+                  <p className="text-gray-500 text-xs">No recent activity.</p>
+                ) : (
+                  activities.map((activity) => (
                   <div key={activity.id} className="flex items-start gap-3">
                     <div className={`mt-0.5 rounded-full p-1.5 ${
                       activity.status === "approved" ? "bg-emerald-100" :
@@ -271,7 +357,8 @@ export default function DashboardPage() {
                       {activity.status}
                     </span>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -301,8 +388,8 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <p className="text-xs font-medium text-gray-900">${po.totalAmount?.toLocaleString() || 0}</p>
                         <div className="flex gap-1 mt-1">
-                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2">Reject</Button>
-                          <Button size="sm" className="h-6 text-[10px] px-2">Approve</Button>
+                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => handleRejectPO(po.id)}>Reject</Button>
+                          <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => handleApprovePO(po.id)}>Approve</Button>
                         </div>
                       </div>
                     </div>
@@ -324,19 +411,19 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <Button variant="outline" className="justify-start">
+              <Button variant="outline" className="justify-start" onClick={() => router.push('/procurement')}>
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 Create Purchase Order
               </Button>
-              <Button variant="outline" className="justify-start">
+              <Button variant="outline" className="justify-start" onClick={() => router.push('/vendors')}>
                 <Users className="mr-2 h-4 w-4" />
                 Add New Vendor
               </Button>
-              <Button variant="outline" className="justify-start">
+              <Button variant="outline" className="justify-start" onClick={() => router.push('/inventory')}>
                 <Package className="mr-2 h-4 w-4" />
                 Update Inventory
               </Button>
-              <Button variant="outline" className="justify-start">
+              <Button variant="outline" className="justify-start" onClick={() => router.push('/analytics')}>
                 <TrendingUp className="mr-2 h-4 w-4" />
                 View Reports
               </Button>

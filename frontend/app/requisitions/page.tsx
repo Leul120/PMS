@@ -39,7 +39,9 @@ interface Requisition {
 
 export default function RequisitionsPage() {
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
+  const [filteredRequisitions, setFilteredRequisitions] = useState<Requisition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -48,6 +50,7 @@ export default function RequisitionsPage() {
       setLoading(true);
       const data = await requisitionApi.getAll();
       setRequisitions(data);
+      setFilteredRequisitions(data);
     } catch (err) {
       toast({
         title: "Error",
@@ -63,9 +66,27 @@ export default function RequisitionsPage() {
     loadRequisitions();
   }, []);
 
-  async function handleApprove(requisitionId: string) {
+  // Filter requisitions based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRequisitions(requisitions);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredRequisitions(
+        requisitions.filter(
+          (r) =>
+            r.requisitionNumber?.toLowerCase().includes(query) ||
+            r.department?.toLowerCase().includes(query) ||
+            r.justification?.toLowerCase().includes(query) ||
+            r.status?.toLowerCase().includes(query)
+        )
+      );
+    }
+  }, [searchQuery, requisitions]);
+
+  async function handleApprove(requisitionId: string, comments: string = "Approved") {
     try {
-      await requisitionApi.approve(requisitionId, { decision: "APPROVED", comments: "Approved" });
+      await requisitionApi.approve(requisitionId, { decision: "APPROVED", comments });
       toast({ title: "Success", description: "Requisition approved successfully" });
       loadRequisitions();
     } catch (err) {
@@ -77,9 +98,9 @@ export default function RequisitionsPage() {
     }
   }
 
-  async function handleReject(requisitionId: string) {
+  async function handleReject(requisitionId: string, comments: string = "Rejected") {
     try {
-      await requisitionApi.approve(requisitionId, { decision: "REJECTED", comments: "Rejected" });
+      await requisitionApi.approve(requisitionId, { decision: "REJECTED", comments });
       toast({ title: "Success", description: "Requisition rejected" });
       loadRequisitions();
     } catch (err) {
@@ -154,7 +175,13 @@ export default function RequisitionsPage() {
             <CardTitle className="text-sm font-medium text-gray-700">Requisitions</CardTitle>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-              <Input type="search" placeholder="Search requisitions..." className="pl-8 w-[200px] h-8 text-xs border-gray-200" />
+              <Input 
+                type="search" 
+                placeholder="Search requisitions..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 w-[200px] h-8 text-xs border-gray-200" 
+              />
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -171,7 +198,7 @@ export default function RequisitionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {requisitions.map((req) => (
+                {filteredRequisitions.map((req) => (
                   <TableRow key={req.requisitionId}>
                     <TableCell className="font-medium">{req.requisitionNumber}</TableCell>
                     <TableCell>{req.department}</TableCell>

@@ -4,7 +4,7 @@ spring:
   application:
     name: analytics-service
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: analytics-service-group
 
@@ -14,3 +14,37 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 2000
       database: 0
+
+  cloud:
+    kubernetes:
+      discovery:
+        enabled: true
+        all-namespaces: false
+      loadbalancer:
+        mode: service
+
+# Service URLs - Kubernetes DNS names with fallback to env vars
+services:
+  vendor:
+    url: ${VENDOR_SERVICE_URL:http://vendor-service:8082}
+  procurement:
+    url: ${PROCUREMENT_SERVICE_URL:http://procurement-service:8084}
+  rfq:
+    url: ${RFQ_SERVICE_URL:http://rfq-bidding-service:8083}
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      vendorService:
+        baseConfig: default
+      procurementService:
+        baseConfig: default
+      rfqService:
+        baseConfig: default

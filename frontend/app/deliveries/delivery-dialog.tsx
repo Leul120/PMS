@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  title: string;
+  status: string;
+}
+
 interface DeliveryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,12 +32,41 @@ interface DeliveryDialogProps {
 export function DeliveryDialog({ open, onOpenChange, onSuccess }: DeliveryDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [loadingPOs, setLoadingPOs] = useState(false);
   const [formData, setFormData] = useState({
     poId: "",
     status: "",
     trackingNumber: "",
     notes: "",
   });
+
+  // Load purchase orders when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadPurchaseOrders();
+    }
+  }, [open]);
+
+  async function loadPurchaseOrders() {
+    try {
+      setLoadingPOs(true);
+      const data = await poApi.getAll();
+      // Filter for POs that can have deliveries (not cancelled/rejected)
+      const validPOs = data.filter((po: any) => 
+        ['PENDING', 'APPROVED', 'PROCESSING', 'SHIPPED'].includes(po.status)
+      );
+      setPurchaseOrders(validPOs);
+    } catch (err) {
+      toast({
+        title: "Warning",
+        description: "Could not load purchase orders. You can still enter the ID manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPOs(false);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,15 +111,34 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess }: DeliveryDialog
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="poId">Purchase Order ID *</Label>
-            <Input
-              id="poId"
-              type="number"
-              value={formData.poId}
-              onChange={(e) => setFormData({ ...formData, poId: e.target.value })}
-              placeholder="Enter PO ID"
-              required
-            />
+            <Label htmlFor="poId">Purchase Order *</Label>
+            {purchaseOrders.length > 0 ? (
+              <Select
+                value={formData.poId}
+                onValueChange={(value) => setFormData({ ...formData, poId: value })}
+              >
+                <SelectTrigger id="poId">
+                  <SelectValue placeholder={loadingPOs ? "Loading..." : "Select a purchase order"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {purchaseOrders.map((po) => (
+                    <SelectItem key={po.id} value={po.id}>
+                      {po.poNumber || `PO-${po.id}`} - {po.title} ({po.status})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="poId"
+                type="number"
+                value={formData.poId}
+                onChange={(e) => setFormData({ ...formData, poId: e.target.value })}
+                placeholder={loadingPOs ? "Loading..." : "Enter PO ID"}
+                required
+                disabled={loadingPOs}
+              />
+            )}
           </div>
 
           <div className="space-y-2">

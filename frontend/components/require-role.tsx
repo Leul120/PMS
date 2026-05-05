@@ -21,8 +21,11 @@ export function RequireRole({ children, allowedRoles, fallback = null }: Require
     }
     if (user && !hasRole(allowedRoles)) {
       // Redirect to appropriate dashboard if user doesn't have permission
-      const dashboard = getDashboardByRole(user.role);
-      router.push(dashboard);
+      const userRole = user.role || user.roleName;
+      if (userRole) {
+        const dashboard = getDashboardByRole(userRole);
+        router.push(dashboard);
+      }
     }
   }, [isAuthenticated, user, allowedRoles, hasRole, router]);
 
@@ -90,8 +93,11 @@ export function useRoleRedirect() {
 
   const redirectToDashboard = () => {
     if (user) {
-      const dashboard = getDashboardByRole(user.role);
-      router.push(dashboard);
+      const userRole = user.role || user.roleName;
+      if (userRole) {
+        const dashboard = getDashboardByRole(userRole);
+        router.push(dashboard);
+      }
     }
   };
 

@@ -1,5 +1,5 @@
 server:
-  port: 8086
+  port: 8088
 
 spring:
   application:
@@ -12,9 +12,34 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+  cloud:
+    kubernetes:
+      discovery:
+        enabled: true
+        all-namespaces: false
+      loadbalancer:
+        mode: service
+
+# Service URLs
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
 
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+# Resilience4j Circuit Breaker
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      authService:
+        baseConfig: default
