@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -177,6 +178,100 @@ public class AuthService {
             "Account unlocked by admin", userId);
         
         return mapToUserResponse(updatedUser);
+    }
+    
+    @Transactional
+    public UserResponse assignRole(Long userId, String roleName) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        Role role = roleRepository.findByRoleName(roleName)
+            .orElseThrow(() -> new RuntimeException("Role not found: " + roleName));
+        
+        user.setRole(role);
+        User updatedUser = userRepository.save(user);
+        
+        auditLogService.logAction("ASSIGN_ROLE", "User", null, 
+            "Role assigned to user: " + roleName, userId);
+        
+        return mapToUserResponse(updatedUser);
+    }
+    
+    @Transactional
+    public UserResponse lockAccount(Long userId) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        user.setAccountLocked(true);
+        user.setLockTime(LocalDateTime.now());
+        
+        User updatedUser = userRepository.save(user);
+        
+        auditLogService.logAction("LOCK_ACCOUNT", "User", null, 
+            "Account locked by admin", userId);
+        
+        return mapToUserResponse(updatedUser);
+    }
+    
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setFailedLoginAttempts(0);
+        user.setAccountLocked(false);
+        userRepository.save(user);
+        
+        auditLogService.logAction("RESET_PASSWORD", "User", null, 
+            "Password reset by admin", userId);
+        
+        log.info("Password reset for user: {}", userId);
+    }
+    
+    public Map<String, Object> getSettings() {
+        Map<String, Object> settings = new java.util.HashMap<>();
+        settings.put("companyName", "ProcurePro Inc.");
+        settings.put("taxId", "");
+        settings.put("timezone", "UTC");
+        settings.put("currency", "USD");
+        return settings;
+    }
+    
+    public Map<String, Object> updateSettings(Map<String, Object> settings) {
+        // In a real implementation, this would persist settings to a database
+        log.info("Settings updated: {}", settings);
+        return getSettings();
+    }
+    
+    public Map<String, Object> getNotificationSettings() {
+        Map<String, Object> settings = new java.util.HashMap<>();
+        settings.put("email", true);
+        settings.put("poApprovals", true);
+        settings.put("deliveryAlerts", true);
+        settings.put("vendorUpdates", false);
+        settings.put("lowStockAlerts", true);
+        settings.put("dailyDigest", false);
+        return settings;
+    }
+    
+    public Map<String, Object> updateNotificationSettings(Map<String, Object> settings) {
+        log.info("Notification settings updated: {}", settings);
+        return getNotificationSettings();
+    }
+    
+    public Map<String, Object> getSecuritySettings() {
+        Map<String, Object> settings = new java.util.HashMap<>();
+        settings.put("twoFactor", false);
+        settings.put("sessionTimeout", 30);
+        settings.put("passwordExpiry", 90);
+        settings.put("loginNotifications", true);
+        return settings;
+    }
+    
+    public Map<String, Object> updateSecuritySettings(Map<String, Object> settings) {
+        log.info("Security settings updated: {}", settings);
+        return getSecuritySettings();
     }
     
     private UserResponse mapToUserResponse(User user) {

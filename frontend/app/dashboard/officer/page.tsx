@@ -126,7 +126,7 @@ export default function OfficerDashboardPage() {
             <CardDescription>Your recent procurement activities</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">No recent activity to display.</p>
+            <p className="text-sm text-muted-foreground">Loading recent activity...</p>
           </CardContent>
         </Card>
       </div>

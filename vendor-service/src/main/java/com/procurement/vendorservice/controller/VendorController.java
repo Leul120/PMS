@@ -104,4 +104,12 @@ public class VendorController {
         vendorService.deleteDocument(documentId);
         return ResponseEntity.ok().build();
     }
+    
+    @PutMapping("/{vendorId}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
+    public ResponseEntity<VendorResponse> updateVendorStatus(
+            @PathVariable Long vendorId,
+            @RequestParam String status) {
+        return ResponseEntity.ok(vendorService.updateVendorStatus(vendorId, status));
+    }
 }

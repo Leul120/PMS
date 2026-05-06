@@ -136,17 +136,9 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       setAuth: (user, token) => {
         set({ user, token, isAuthenticated: true });
-        if (typeof window !== "undefined") {
-          localStorage.setItem("token", token);
-          localStorage.setItem("user", JSON.stringify(user));
-        }
       },
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-        }
       },
       hasRole: (roles) => {
         const { user } = get();
@@ -166,6 +158,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage",
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isAuthenticated = !!(state.user && state.token);
+        }
+      },
     }
   )
 );

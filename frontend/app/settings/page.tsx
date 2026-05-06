@@ -71,7 +71,7 @@ export default function SettingsPage() {
         setLoginNotifications(security.loginNotifications ?? true);
       }
     } catch (err) {
-      console.error("Failed to load settings:", err);
+      // Silently handle errors - use default values
     } finally {
       setLoading(false);
     }

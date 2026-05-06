@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
         setVendorData(generateVendorSpendData(pos));
         setCategoryData(generateCategoryData(pos));
       } catch (err) {
-        console.error("Failed to load analytics stats:", err);
+        // Silently handle errors - show empty state
       } finally {
         setLoading(false);
       }

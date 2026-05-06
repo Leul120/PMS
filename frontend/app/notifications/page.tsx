@@ -41,7 +41,6 @@ export default function NotificationsPage() {
       }
     } catch (err) {
       // Silently handle backend errors - show empty state instead of error toast
-      console.error("Failed to load notifications:", err);
       setNotifications([]);
     } finally {
       setLoading(false);

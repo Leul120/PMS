@@ -52,7 +52,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       unsub?.();
       clearInterval(interval);
     };
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -70,7 +70,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       router.push(dashboardPath);
       return;
     }
-  }, [isHydrated, isAuthenticated, isPublicRoute, router, user]);
+  }, [isHydrated, isAuthenticated, isPublicRoute, router, user, pathname]);
 
   // Show loading state while hydrating or checking auth
   if (!isHydrated || (!isAuthenticated && !isPublicRoute)) {

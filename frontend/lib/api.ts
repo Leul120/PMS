@@ -129,55 +129,33 @@ export const authApi = {
     }),
 };
 
-// Settings APIs
-export const settingsApi = {
-  getSettings: () => fetchApi('/settings'),
-  updateSettings: (data: any) =>
-    fetchApi('/settings', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  getNotifications: () => fetchApi('/settings/notifications'),
-  updateNotifications: (data: any) =>
-    fetchApi('/settings/notifications', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  getSecurity: () => fetchApi('/settings/security'),
-  updateSecurity: (data: any) =>
-    fetchApi('/settings/security', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-};
-
 // Admin APIs (Admin only endpoints)
 export const adminApi = {
   // User management
-  getAllUsers: () => fetchApi<any[]>('/admin/users'),
+  getAllUsers: () => fetchApi<any[]>('/auth/admin/users'),
   createUser: (data: { fullName: string; email: string; password: string; phoneNumber?: string; roleName: string }) =>
-    fetchApi('/admin/users', {
+    fetchApi('/auth/admin/users', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   updateUser: (userId: string, data: any) =>
-    fetchApi(`/admin/users/${userId}`, {
+    fetchApi(`/auth/users/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   deleteUser: (userId: string) =>
     fetchApi(`/admin/users/${userId}`, { method: 'DELETE' }),
   assignRole: (userId: string, roleName: string) =>
-    fetchApi(`/admin/users/${userId}/role`, {
+    fetchApi(`/auth/admin/users/${userId}/role`, {
       method: 'PUT',
       body: JSON.stringify({ roleName }),
     }),
   lockAccount: (userId: string) =>
-    fetchApi(`/admin/users/${userId}/lock`, { method: 'POST' }),
+    fetchApi(`/auth/admin/users/${userId}/lock`, { method: 'POST' }),
   unlockAccount: (userId: string) =>
-    fetchApi(`/admin/users/${userId}/unlock`, { method: 'POST' }),
+    fetchApi(`/auth/users/${userId}/unlock`, { method: 'POST' }),
   resetPassword: (userId: string, newPassword: string) =>
-    fetchApi(`/admin/users/${userId}/reset-password`, {
+    fetchApi(`/auth/admin/users/${userId}/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ newPassword }),
     }),
@@ -299,7 +277,7 @@ export const analyticsApi = {
   getDashboard: () => fetchApi('/dashboard/overview'),
   getSpendReport: () => fetchApi('/reports/spend'),
   getComplianceReport: () => fetchApi('/reports/compliance'),
-  getActivity: () => fetchApi<any[]>('/analytics/activity'),
+  getActivity: (userId?: string) => fetchApi<any>(`/analytics/activity${userId ? `?userId=${userId}` : ''}`),
   getVendorComparison: (vendorIds: string[]) =>
     fetchApi(`/reports/vendor-comparison?vendorIds=${vendorIds.join(',')}`),
 };
@@ -326,6 +304,28 @@ export const inventoryApi = {
       body: JSON.stringify({ quantityChange }),
     }),
   getLowStock: () => fetchApi<any[]>('/inventory/low-stock'),
+};
+
+// Settings APIs
+export const settingsApi = {
+  getSettings: () => fetchApi<any>('/auth/settings'),
+  updateSettings: (data: any) =>
+    fetchApi('/auth/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getNotifications: () => fetchApi<any>('/auth/settings/notifications'),
+  updateNotifications: (data: any) =>
+    fetchApi('/auth/settings/notifications', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  getSecurity: () => fetchApi<any>('/auth/settings/security'),
+  updateSecurity: (data: any) =>
+    fetchApi('/auth/settings/security', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Requisition APIs

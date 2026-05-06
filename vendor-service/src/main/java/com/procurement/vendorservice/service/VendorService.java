@@ -205,6 +205,18 @@ public class VendorService {
         log.info("Document deleted: {}", documentId);
     }
     
+    @Transactional
+    public VendorResponse updateVendorStatus(Long vendorId, String status) {
+        Vendor vendor = vendorRepository.findById(vendorId)
+            .orElseThrow(() -> new RuntimeException("Vendor not found"));
+        
+        vendor.setComplianceStatus(status);
+        Vendor updatedVendor = vendorRepository.save(vendor);
+        log.info("Vendor status updated: {} to {}", vendorId, status);
+        
+        return mapToVendorResponse(updatedVendor);
+    }
+    
     private VendorDocumentResponse mapToDocumentResponse(VendorDocument document) {
         return VendorDocumentResponse.builder()
             .documentId(document.getDocumentId())

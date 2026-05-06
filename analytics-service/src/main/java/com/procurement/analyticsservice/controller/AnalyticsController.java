@@ -98,4 +98,31 @@ public class AnalyticsController {
                     return ResponseEntity.ok(overview);
                 });
     }
+    
+    @GetMapping("/analytics/activity")
+    public Mono<ResponseEntity<Map<String, Object>>> getActivity(@RequestParam Long userId) {
+        return Mono.zip(
+                        rfqClient.getRFQs(),
+                        procurementClient.getPurchaseOrders(),
+                        vendorClient.getVendors()
+                )
+                .map(tuple -> {
+                    List<Map<String, Object>> rfqs = tuple.getT1();
+                    List<Map<String, Object>> purchaseOrders = tuple.getT2();
+                    List<Map<String, Object>> vendors = tuple.getT3();
+
+                    Map<String, Object> activity = new HashMap<>();
+                    activity.put("recentRFQs", rfqs.stream()
+                            .limit(5)
+                            .collect(java.util.stream.Collectors.toList()));
+                    activity.put("recentPOs", purchaseOrders.stream()
+                            .limit(5)
+                            .collect(java.util.stream.Collectors.toList()));
+                    activity.put("recentVendors", vendors.stream()
+                            .limit(5)
+                            .collect(java.util.stream.Collectors.toList()));
+                    activity.put("totalActivity", rfqs.size() + purchaseOrders.size() + vendors.size());
+                    return ResponseEntity.ok(activity);
+                });
+    }
 }
