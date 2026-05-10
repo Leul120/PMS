@@ -48,6 +48,9 @@ export type Permission =
   | "po:create"
   | "po:approve"
   | "po:reject"
+  // Requisitions
+  | "requisitions:create"
+  | "requisitions:approve"
   // Deliveries & Invoices
   | "deliveries:read"
   | "deliveries:update"
@@ -83,6 +86,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "rfq:read", "rfq:create", "rfq:update", "rfq:close", "rfq:cancel",
     "bids:read", "bids:submit", "bids:evaluate",
     "po:read", "po:create", "po:approve", "po:reject",
+    "requisitions:create", "requisitions:approve",
     "deliveries:read", "deliveries:update",
     "invoices:read", "invoices:create", "invoices:dispute", "three-way-match:validate",
     "scoring:read", "scoring:calculate",
@@ -98,6 +102,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "rfq:read", "rfq:create", "rfq:update", "rfq:close", "rfq:cancel",
     "bids:read", "bids:evaluate",
     "po:read", "po:create",
+    "requisitions:create",
     "deliveries:read", "deliveries:update",
     "invoices:read", "invoices:create", "invoices:dispute", "three-way-match:validate",
     "scoring:read", "scoring:calculate",
@@ -105,12 +110,13 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "analytics:read", "reports:view",
     "users:read",
   ],
-  // MANAGER: Approve high-value POs, view reports, view vendor scores
+  // MANAGER: Approve POs and requisitions, view reports, view vendor scores — cannot create POs or verify vendors
   MANAGER: [
-    "vendors:read", "vendors:verify",
+    "vendors:read",
     "rfq:read",
     "bids:read",
-    "po:read", "po:create", "po:approve", "po:reject",
+    "po:read", "po:approve", "po:reject",
+    "requisitions:create", "requisitions:approve",
     "deliveries:read", "invoices:read",
     "scoring:read",
     "inventory:read",

@@ -23,6 +23,7 @@ interface PODialogProps {
   /** Pass an existing PO to edit it instead of creating a new one */
   initialData?: {
     id: string | number;
+    rfqId?: string | number;
     vendorId?: string | number;
     totalAmount?: number;
     deliveryDate?: string;
@@ -51,7 +52,7 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
     if (!open) return;
     if (initialData) {
       setFormData({
-        rfqId: "",
+        rfqId: String(initialData.rfqId || ""),
         vendorId: String(initialData.vendorId || ""),
         totalAmount: String(initialData.totalAmount || ""),
         expectedDeliveryDate: initialData.deliveryDate
@@ -91,9 +92,15 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
 
     try {
       if (isEditing) {
+        if (!formData.rfqId || !formData.vendorId || !formData.totalAmount) {
+          toast({ title: "Validation error", description: "RFQ, Vendor and Amount are required.", variant: "destructive" });
+          setIsSubmitting(false);
+          return;
+        }
         await poApi.update(initialData!.id, {
-          vendorId: formData.vendorId ? parseInt(formData.vendorId) : undefined,
-          totalAmount: formData.totalAmount ? parseFloat(formData.totalAmount) : undefined,
+          rfqId: parseInt(formData.rfqId),
+          vendorId: parseInt(formData.vendorId),
+          totalAmount: parseFloat(formData.totalAmount),
           expectedDeliveryDate: formData.expectedDeliveryDate || undefined,
         });
         toast({ title: "Purchase Order updated", description: "The purchase order has been updated." });
@@ -140,38 +147,45 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isEditing && (
-            <div className="space-y-2">
-              <Label htmlFor="rfqId">RFQ *</Label>
-              {rfqs.length > 0 ? (
-                <Select
-                  value={formData.rfqId}
-                  onValueChange={(v) => setFormData({ ...formData, rfqId: v })}
-                >
-                  <SelectTrigger id="rfqId">
-                    <SelectValue placeholder={loadingData ? "Loading..." : "Select an open RFQ"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rfqs.map((rfq: any) => (
-                      <SelectItem key={rfq.rfqId || rfq.id} value={String(rfq.rfqId || rfq.id)}>
-                        {rfq.rfqNumber || `RFQ-${rfq.rfqId || rfq.id}`} — {rfq.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id="rfqId"
-                  type="number"
-                  value={formData.rfqId}
-                  onChange={(e) => setFormData({ ...formData, rfqId: e.target.value })}
-                  placeholder={loadingData ? "Loading..." : "Enter RFQ ID"}
-                  required
-                  disabled={loadingData}
-                />
-              )}
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="rfqId">RFQ *</Label>
+            {isEditing ? (
+              <Input
+                id="rfqId"
+                type="number"
+                value={formData.rfqId}
+                readOnly
+                disabled
+                className="bg-muted"
+              />
+            ) : rfqs.length > 0 ? (
+              <Select
+                value={formData.rfqId}
+                onValueChange={(v) => setFormData({ ...formData, rfqId: v })}
+              >
+                <SelectTrigger id="rfqId">
+                  <SelectValue placeholder={loadingData ? "Loading..." : "Select an open RFQ"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {rfqs.map((rfq: any) => (
+                    <SelectItem key={rfq.rfqId || rfq.id} value={String(rfq.rfqId || rfq.id)}>
+                      {rfq.rfqNumber || `RFQ-${rfq.rfqId || rfq.id}`} — {rfq.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="rfqId"
+                type="number"
+                value={formData.rfqId}
+                onChange={(e) => setFormData({ ...formData, rfqId: e.target.value })}
+                placeholder={loadingData ? "Loading..." : "Enter RFQ ID"}
+                required
+                disabled={loadingData}
+              />
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

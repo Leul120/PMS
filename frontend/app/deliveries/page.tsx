@@ -89,6 +89,7 @@ export default function DeliveriesPage() {
   const hasRole = useAuthStore((state) => state.hasRole);
   const canUpdateDelivery = hasPermission("deliveries:update");
   const canValidateMatch = hasPermission("three-way-match:validate");
+  const canRaiseDispute = hasPermission("invoices:dispute");
 
   async function loadDeliveries(page = 0) {
     try {
@@ -393,9 +394,9 @@ export default function DeliveriesPage() {
                             <Scale className="h-3.5 w-3.5" />
                           </Button>
                           )}
-                          {canUpdateDelivery && (
-                          <Button 
-                            variant="outline" 
+                          {canRaiseDispute && (
+                          <Button
+                            variant="outline"
                             size="sm"
                             className="h-7 w-7 p-0"
                             onClick={() => { setDisputeDelivery(delivery); setDisputeDialogOpen(true); }}

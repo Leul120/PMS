@@ -199,7 +199,7 @@ export const authApi = {
     email: string;
     password: string;
     phoneNumber?: string;
-    roleName?: string;
+    roleName: string;
   }) =>
     fetchApi('/auth/register', {
       method: 'POST',
@@ -254,7 +254,7 @@ export const adminApi = {
     }),
 
   deleteUser: (userId: string) =>
-    fetchApi(`/auth/admin/users/${userId}`, { method: 'DELETE' }),
+    fetchApi(`/admin/users/${userId}`, { method: 'DELETE' }),
 
   assignRole: (userId: string, roleName: string) =>
     fetchApi(`/auth/admin/users/${userId}/role`, {
@@ -356,11 +356,13 @@ export const poApi = {
       body: JSON.stringify(data),
     }),
 
-  /** Update mutable fields of an existing PO */
+  /** Update mutable fields of an existing PO. rfqId is required by the backend (@NotNull). */
   update: (id: string | number, data: {
-    vendorId?: number;
-    totalAmount?: number;
+    rfqId: number;
+    vendorId: number;
+    totalAmount: number;
     expectedDeliveryDate?: string;
+    bidId?: number;
   }) =>
     fetchApi(`/purchase-orders/${id}`, {
       method: 'PUT',
@@ -466,8 +468,9 @@ export const deliveryApi = {
 // ── Invoice APIs ──────────────────────────────────────────────────────────────
 
 export const invoiceApi = {
-  /** ADMIN, OFFICER, MANAGER, AUDITOR only — returns 403 for VENDOR */
-  getAll: () => fetchApi<any[]>('/invoices'),
+  /** All roles including VENDOR can access GET /invoices */
+  getAll: () =>
+    fetchApi<PagedResponse<any> | any[]>('/invoices?page=0&size=200').then(unwrapPage),
   getByPO: (poId: string | number) => fetchApi<any[]>(`/invoices/po/${poId}`),
 
   /** Backend accepts JSON body (InvoiceRequest) */
@@ -648,7 +651,8 @@ export const disputeApi = {
       body: JSON.stringify(data),
     }),
 
-  getAll: () => fetchApi<any[]>('/disputes'),
+  getAll: () =>
+    fetchApi<PagedResponse<any> | any[]>('/disputes?page=0&size=200').then(unwrapPage),
   getById: (id: string | number) => fetchApi<any>(`/disputes/${id}`),
 
   resolve: (id: string | number, data: { resolution: string }) =>

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\dawit\\\\PMS\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\" -Directory)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\dawit\\\\PMS\\\\frontend\" -Recurse -Name)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

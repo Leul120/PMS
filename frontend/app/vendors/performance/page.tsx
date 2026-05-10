@@ -69,7 +69,7 @@ export default function VendorPerformancePage() {
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
   const isVendor = user?.role === "VENDOR" || user?.roleName === "VENDOR";
-  const canRecalculate = hasPermission("vendors:verify"); // officer/admin can trigger
+  const canRecalculate = hasPermission("scoring:calculate");
 
   async function loadScores() {
     try {

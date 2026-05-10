@@ -44,9 +44,9 @@ const navigation: NavItem[] = [
   // Vendor directory: internal roles only (vendors can only view their own via /vendors/{id})
   { name: "Vendors", href: "/vendors", icon: Building2, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
   // Requisitions: Based on procurement service patterns
-  { name: "Requisitions", href: "/requisitions", icon: ClipboardList, allowedRoles: ["ADMIN", "OFFICER", "MANAGER"] },
+  { name: "Requisitions", href: "/requisitions", icon: ClipboardList, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
   // Procurement (PO management): All roles can view POs
-  { name: "Procurement", href: "/procurement", icon: ShoppingCart, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+  { name: "Procurement", href: "/procurement", icon: ShoppingCart, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
   // RFQ & Bidding: All roles can view RFQs
   { name: "RFQ & Bidding", href: "/rfq", icon: Gavel, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
   // Purchase Orders: All roles can view POs
@@ -59,8 +59,8 @@ const navigation: NavItem[] = [
   { name: "Analytics", href: "/analytics", icon: BarChart3, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
   // Admin panel: ADMIN only
   { name: "Admin", href: "/dashboard/admin", icon: Shield, allowedRoles: ["ADMIN"] },
-  // Team/Users: ADMIN only (user management is admin-only)
-  { name: "Team", href: "/users", icon: UserCog, allowedRoles: ["ADMIN"] },
+  // Team/Users: all internal roles can view the team directory; only ADMIN can manage users
+  { name: "Team", href: "/users", icon: UserCog, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
   // Notifications: All roles can view their own notifications
   { name: "Notifications", href: "/notifications", icon: Bell, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
   // Invoices: All roles can view invoices

@@ -74,6 +74,7 @@ export default function InvoicesPage() {
   const hasRole = useAuthStore((state) => state.hasRole);
   const isVendor = user?.role === "VENDOR" || user?.roleName === "VENDOR";
   const canValidate = hasPermission("three-way-match:validate");
+  const canDispute = hasPermission("invoices:dispute");
   const canSubmitInvoice = hasPermission("invoices:create");
 
   async function loadInvoices() {
@@ -419,7 +420,7 @@ export default function InvoicesPage() {
                                   Validate
                                 </Button>
                               )}
-                              {canValidate && (inv.discrepancyFlag || inv.status?.toUpperCase() === "DISPUTED") && (
+                              {canDispute && (inv.discrepancyFlag || inv.status?.toUpperCase() === "DISPUTED") && (
                                 <Button
                                   size="sm"
                                   variant="outline"

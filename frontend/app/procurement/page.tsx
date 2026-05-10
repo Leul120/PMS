@@ -48,10 +48,12 @@ import {
 
 interface PurchaseOrder {
   id: string;
+  rfqId?: string;
   poNumber: string;
   title?: string;
   description?: string;
   vendorName?: string;
+  vendorId?: string;
   totalAmount: number;
   status: string;
   priority?: string;
@@ -92,6 +94,8 @@ export default function ProcurementPage() {
       const normalised = items.map((po: any) => ({
         ...po,
         id: String(po.id || po.poId),
+        rfqId: po.rfqId ? String(po.rfqId) : undefined,
+        vendorId: po.vendorId ? String(po.vendorId) : undefined,
         poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
         vendorName: po.vendorName || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
         createdAt: po.createdAt || po.issueDate,

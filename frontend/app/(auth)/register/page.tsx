@@ -205,6 +205,7 @@ export default function RegisterPage() {
                           onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                           required
                           minLength={8}
+                          maxLength={20}
                           className="h-8 text-xs border-gray-200 pr-10"
                         />
                         <Button
@@ -222,7 +223,7 @@ export default function RegisterPage() {
                         </Button>
                       </div>
                       <p className="text-[10px] text-gray-500">
-                        Must be at least 8 characters with letters and numbers
+                        8–20 characters with letters and numbers
                       </p>
                     </div>
 
@@ -238,7 +239,7 @@ export default function RegisterPage() {
                       <Button
                         type="submit"
                         className="flex-1 h-8 text-xs font-medium"
-                        disabled={isLoading || formData.password.length < 8}
+                        disabled={isLoading || formData.password.length < 8 || formData.password.length > 20}
                       >
                         {isLoading ? (
                           <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

@@ -52,9 +52,8 @@ export default function RequisitionsPage() {
   const { toast } = useToast();
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
-  // OFFICER and ADMIN can create requisitions; MANAGER/ADMIN can approve
-  const canCreate = hasPermission("po:create"); // reuse po:create as proxy for requisition creation
-  const canApprove = hasPermission("po:approve");
+  const canCreate = hasPermission("requisitions:create");
+  const canApprove = hasPermission("requisitions:approve");
 
   async function loadRequisitions(page = 0) {
     try {
@@ -77,7 +76,7 @@ export default function RequisitionsPage() {
   }
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER"])) return;
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
     loadRequisitions(currentPage);
   }, [currentPage]);
 
@@ -137,7 +136,7 @@ export default function RequisitionsPage() {
   };
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
