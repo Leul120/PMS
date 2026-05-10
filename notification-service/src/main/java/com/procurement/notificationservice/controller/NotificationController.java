@@ -6,6 +6,7 @@ import com.procurement.notificationservice.service.NotificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,26 +19,31 @@ public class NotificationController {
     private final NotificationService notificationService;
     
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<NotificationResponse> createNotification(@Valid @RequestBody NotificationRequest request) {
         return ResponseEntity.ok(notificationService.createNotification(request));
     }
     
     @GetMapping("/user/{userId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<NotificationResponse>> getUserNotifications(@PathVariable Long userId) {
         return ResponseEntity.ok(notificationService.getUserNotifications(userId));
     }
     
     @GetMapping("/user/{userId}/unread")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<NotificationResponse>> getUnreadNotifications(@PathVariable Long userId) {
         return ResponseEntity.ok(notificationService.getUnreadNotifications(userId));
     }
     
     @PostMapping("/{notificationId}/read")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<NotificationResponse> markAsRead(@PathVariable Long notificationId) {
         return ResponseEntity.ok(notificationService.markAsRead(notificationId));
     }
     
     @PostMapping("/{notificationId}/send")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<NotificationResponse> sendNotification(@PathVariable Long notificationId) {
         return ResponseEntity.ok(notificationService.sendNotification(notificationId));
     }

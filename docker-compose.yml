@@ -130,6 +130,12 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - procurement-network
 
@@ -231,6 +237,7 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
       - AUTH_SERVICE_URL=http://auth-service:8081
       - VENDOR_SERVICE_URL=http://vendor-service:8082
       - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
@@ -268,17 +275,21 @@ services:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_HOST=redis-auth
       - REDIS_PORT=6379
-      # RS256 Asymmetric JWT Configuration
       - JWT_EXPIRATION=28800000
-      - JWT_PRIVATE_KEY_PATH=file:/app/keys/jwt-private.key
-      - JWT_PUBLIC_KEY_PATH=file:/app/keys/jwt-public.key
-    volumes:
-      # Mount RSA keys for development (keys embedded in image for production)
-      - ./auth-service/src/main/resources/keys:/app/keys:ro
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
+      # Password reset email (set these in a .env file or CI secrets)
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     depends_on:
-      - postgres-auth
-      - kafka
-      - redis-auth
+      postgres-auth:
+        condition: service_started
+      redis-auth:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -298,10 +309,14 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
     depends_on:
-      - postgres-vendor
-      - kafka
-      - redis-vendor
-      - auth-service
+      postgres-vendor:
+        condition: service_started
+      redis-vendor:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -322,11 +337,16 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8081
       - VENDOR_SERVICE_URL=http://vendor-service:8082
     depends_on:
-      - postgres-rfq
-      - kafka
-      - redis-rfq
-      - auth-service
-      - vendor-service
+      postgres-rfq:
+        condition: service_started
+      redis-rfq:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      vendor-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -347,11 +367,16 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8081
       - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
     depends_on:
-      - postgres-procurement
-      - kafka
-      - redis-procurement
-      - auth-service
-      - rfq-bidding-service
+      postgres-procurement:
+        condition: service_started
+      redis-procurement:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      rfq-bidding-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -372,11 +397,16 @@ services:
       - AUTH_SERVICE_URL=http://auth-service:8081
       - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
     depends_on:
-      - postgres-delivery
-      - kafka
-      - redis-delivery
-      - auth-service
-      - procurement-service
+      postgres-delivery:
+        condition: service_started
+      redis-delivery:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      procurement-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -396,11 +426,16 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
     depends_on:
-      - postgres-scoring
-      - kafka
-      - redis-scoring
-      - auth-service
-      - delivery-invoice-service
+      postgres-scoring:
+        condition: service_started
+      redis-scoring:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      delivery-invoice-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
@@ -492,26 +527,33 @@ services:
       - REDIS_HOST=redis-notification
       - REDIS_PORT=6379
       - NOTIFICATION_SERVICE_URL=http://notification-service:8089
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_USERNAME=your-email@gmail.com
-      - SMTP_PASSWORD=your-app-password
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
     depends_on:
-      - postgres-notification
-      - kafka
-      - redis-notification
+      postgres-notification:
+        condition: service_started
+      redis-notification:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - procurement-network
 
   # Frontend (Next.js)
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - API_GATEWAY_URL=http://api-gateway:8080
     container_name: frontend
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://api-gateway:8080
+      - API_GATEWAY_URL=http://api-gateway:8080
     depends_on:
       - api-gateway
     networks:

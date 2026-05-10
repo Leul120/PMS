@@ -200,6 +200,8 @@ public class UserManagementService {
                 .roleName(user.getRole().getRoleName())
                 .lastLogin(user.getLastLogin())
                 .registrationDate(user.getRegistrationDate())
+                .active(!Boolean.TRUE.equals(user.getAccountLocked()))
+                .accountLocked(Boolean.TRUE.equals(user.getAccountLocked()))
                 .build();
     }
 }

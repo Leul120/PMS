@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { ProtectedRoute } from "@/components/protected-route";
-
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-sans",
-});
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: "ProcurePro - Enterprise Procurement Management",
@@ -23,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={montserrat.variable}>
+    <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased text-[13px]">
         <ThemeProvider
           attribute="class"
@@ -31,9 +25,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange={false}
         >
-          <ProtectedRoute>
-            {children}
-          </ProtectedRoute>
+          <ErrorBoundary>
+            <ProtectedRoute>
+              {children}
+            </ProtectedRoute>
+          </ErrorBoundary>
           <Toaster />
         </ThemeProvider>
       </body>

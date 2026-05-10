@@ -23,9 +23,18 @@ public class ProcurementClient {
     @Retry(name = "procurementService")
     public Mono<List<Map<String, Object>>> getPurchaseOrders() {
         return procurementWebClient.get()
-                .uri("/api/purchase-orders")
+                .uri("/api/purchase-orders?page=0&size=1000")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .map(body -> {
+                    Object content = body.get("content");
+                    if (content instanceof List<?> list) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> typed = (List<Map<String, Object>>) list;
+                        return typed;
+                    }
+                    return List.<Map<String, Object>>of();
+                })
                 .doOnError(e -> log.error("Error fetching purchase orders: {}", e.getMessage()));
     }
 

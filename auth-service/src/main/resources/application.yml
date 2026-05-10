@@ -2,6 +2,9 @@ server:
   port: 8081
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: auth-service
   datasource:
@@ -10,12 +13,16 @@ spring:
     password: secret
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
+      maximum-pool-size: 20
       minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
+    open-in-view: false
     hibernate:
-      ddl-auto: create-drop
-    show-sql: true
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -27,26 +34,46 @@ spring:
       timeout: 2000
       database: 0
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
     consumer:
       group-id: auth-service-group
       auto-offset-reset: earliest
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "com.procurement.*"
+    listener:
+      missing-topics-fatal: false
+  mail:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:leulmelkamu15@gmail.com}
+    password: ${SMTP_PASSWORD:rgsh oyvz mdbr fydw}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 
-# JWT Configuration - RS256 Asymmetric Encryption
-# Private key: Used only by auth-service to sign tokens
-# Public key: Can be shared with other services for token verification
 jwt:
   expiration: ${JWT_EXPIRATION:28800000}
-  private-key-path: ${JWT_PRIVATE_KEY_PATH:classpath:keys/jwt-private.key}
-  public-key-path: ${JWT_PUBLIC_KEY_PATH:classpath:keys/jwt-public.key}
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 
 logging:
   level:
     com.procurement: DEBUG
     org.springframework.security: DEBUG
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  password-reset:
+    token-expiry-minutes: ${PASSWORD_RESET_EXPIRY_MINUTES:60}

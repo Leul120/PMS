@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { notificationApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
+import { RequireRole } from "@/components/require-role";
 import { 
   Bell, 
   CheckCircle, 
@@ -36,11 +37,11 @@ export default function NotificationsPage() {
       setLoading(true);
       const userId = user?.userId || user?.id;
       if (userId) {
-        const data = await notificationApi.getUserNotifications(userId);
+        const data = await notificationApi.getUserNotifications(userId).catch(() => []);
         setNotifications(data || []);
       }
-    } catch (err) {
-      // Silently handle backend errors - show empty state instead of error toast
+    } catch {
+      // silently ignore â€â€ show empty state
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -48,6 +49,7 @@ export default function NotificationsPage() {
   }
 
   useEffect(() => {
+    if (!user) return;
     loadNotifications();
   }, [user]);
 
@@ -76,7 +78,20 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter(n => n.status === 'PENDING').length;
 
+  async function handleMarkAllAsRead() {
+    const unread = notifications.filter(n => n.status === 'PENDING');
+    if (unread.length === 0) return;
+    try {
+      await Promise.all(unread.map(n => notificationApi.markAsRead(n.notificationId)));
+      toast({ title: "All marked as read", description: `${unread.length} notifications marked as read` });
+      loadNotifications();
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to mark all as read", variant: "destructive" });
+    }
+  }
+
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -85,6 +100,11 @@ export default function NotificationsPage() {
             <p className="text-xs text-gray-500 mt-0.5">View and manage notifications</p>
           </div>
           <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleMarkAllAsRead}>
+                Mark all as read
+              </Button>
+            )}
             <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-xs text-gray-600">
               <Bell className="h-3.5 w-3.5 mr-1.5" />
               {unreadCount} unread
@@ -144,5 +164,6 @@ export default function NotificationsPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequireRole>
   );
 }

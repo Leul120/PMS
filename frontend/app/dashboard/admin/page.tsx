@@ -59,6 +59,7 @@ import {
   Eye,
   Truck
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface User {
   userId: number;
@@ -84,13 +85,28 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  // Reset password dialog
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetTempPassword, setResetTempPassword] = useState("");
+  const [resetUserName, setResetUserName] = useState("");
+  // Delete confirm dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+  const hasRole = useAuthStore((state) => state.hasRole);
 
   const loadUsers = async () => {
+    if (!hasRole(["ADMIN"])) return;
     try {
       setLoading(true);
       const data = await adminApi.getAllUsers();
-      setUsers(data);
+      // Normalise: backend enriched UserResponse now includes active and accountLocked
+      const normalised = (data as any[]).map((u: any) => ({
+        ...u,
+        accountLocked: u.accountLocked ?? !u.active,
+      }));
+      setUsers(normalised);
     } catch (err) {
       toast({
         title: "Error",
@@ -104,7 +120,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [hasRole]);
 
   const handleAssignRole = async (userId: number, roleName: string, userName: string) => {
     try {
@@ -148,13 +164,16 @@ export default function AdminDashboardPage() {
   const handleResetPassword = async (userId: number, userName: string) => {
     try {
       setActionLoading(userId);
-      // Generate a temporary password
-      const tempPassword = Math.random().toString(36).slice(-8);
+      // Generate a temporary password and send to backend â€â€ do NOT display in toast
+      const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(10)))
+        .map(b => b.toString(36))
+        .join('')
+        .slice(0, 10);
       await adminApi.resetPassword(userId.toString(), tempPassword);
-      toast({
-        title: "Password Reset",
-        description: `Temporary password for ${userName}: ${tempPassword}`,
-      });
+      // Show in a dialog so admin can copy it securely (not in a dismissible toast)
+      setResetTempPassword(tempPassword);
+      setResetUserName(userName);
+      setResetDialogOpen(true);
     } catch (err) {
       toast({
         title: "Error",
@@ -167,13 +186,18 @@ export default function AdminDashboardPage() {
   };
 
   const handleDeleteUser = async (userId: number, userName: string) => {
-    if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      return;
-    }
+    setUserToDelete(users.find(u => u.userId === userId) || null);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
     try {
-      setActionLoading(userId);
-      await adminApi.deleteUser(userId.toString());
-      toast({ title: "Success", description: `Deleted ${userName}` });
+      setActionLoading(userToDelete.userId);
+      await adminApi.deleteUser(userToDelete.userId.toString());
+      toast({ title: "Success", description: `Deleted ${userToDelete.fullName}` });
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
       loadUsers();
     } catch (err) {
       toast({
@@ -197,7 +221,7 @@ export default function AdminDashboardPage() {
               <h1 className="text-3xl font-bold">Admin Dashboard</h1>
               <p className="text-muted-foreground">Manage users and assign roles</p>
             </div>
-            <Button onClick={() => toast({ title: "Info", description: "Create user dialog - use Users page for now" })}><Plus className="mr-2 h-4 w-4" /> Create User</Button>
+            <Button onClick={() => router.push('/users')}><Plus className="mr-2 h-4 w-4" /> Create User</Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-5">
@@ -289,6 +313,61 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Reset Password Dialog */}
+        <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Password Reset</DialogTitle>
+              <DialogDescription>
+                Temporary password for <strong>{resetUserName}</strong>. Share this securely â€â€ it will not be shown again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                <code className="flex-1 text-sm font-mono select-all">{resetTempPassword}</code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetTempPassword);
+                    toast({ title: "Copied", description: "Password copied to clipboard" });
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">The user must change this password on next login.</p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setResetDialogOpen(false)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirm Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{userToDelete?.fullName}</strong>? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                disabled={actionLoading === userToDelete?.userId}
+                onClick={confirmDeleteUser}
+              >
+                {actionLoading === userToDelete?.userId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </RequireRole>
   );

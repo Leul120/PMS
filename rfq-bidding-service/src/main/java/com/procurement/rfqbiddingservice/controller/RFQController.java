@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 @RestController
 @RequestMapping("/api/rfqs")
 @RequiredArgsConstructor
@@ -27,8 +26,10 @@ public class RFQController {
     
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
-    public ResponseEntity<List<RFQResponse>> getAllRFQs() {
-        return ResponseEntity.ok(rfqService.getAllRFQs());
+    public ResponseEntity<PagedResponse<RFQResponse>> getAllRFQs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(rfqService.getAllRFQs(page, size));
     }
     
     @GetMapping("/status/{status}")

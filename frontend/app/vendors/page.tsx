@@ -24,38 +24,54 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { vendorApi, scoringApi } from "@/lib/api";
+import type { PagedResponse } from "@/lib/api";
 import { VendorDocumentDialog } from "./vendor-document-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { VendorDialog } from "./vendor-dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RequireRole } from "@/components/require-role";
+import { useAuthStore } from "@/lib/auth-store";
 import { 
   Search, 
   Plus, 
   MoreHorizontal, 
-  Mail, 
-  Star,
   Filter,
   Download,
-  Building2,
   Loader2,
   FileText,
   Eye,
-  Edit,
   ShoppingCart,
   Ban
 } from "lucide-react";
 
 interface Vendor {
+  // Backend returns vendorId; the enriched response also sets id = vendorId
   id: string;
+  vendorId?: number;
   companyName: string;
   email: string;
   phone?: string;
+  phoneNumber?: string;
   category?: string;
+  categoryName?: string;
   status: string;
   verified: boolean;
+  complianceStatus?: string;
+  // Optional enriched fields
   rating?: number;
   totalOrders?: number;
-  totalSpend?: string;
   compliance?: string;
 }
 
@@ -68,19 +84,48 @@ export default function VendorsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [vendorToDeactivate, setVendorToDeactivate] = useState<Vendor | null>(null);
+  const [deactivateLoading, setDeactivateLoading] = useState(false);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 50;
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const { toast } = useToast();
   const router = useRouter();
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const hasRole = useAuthStore((state) => state.hasRole);
+  const canCreate = hasPermission("vendors:create");
+  const canVerify = hasPermission("vendors:verify");
+  const canUpdate = hasPermission("vendors:update");
+  const canDelete = hasPermission("vendors:delete");
 
   useEffect(() => {
-    loadVendors();
-  }, []);
+    // Only fetch if user has access â€â€ avoids 400/403 errors for unauthorized roles
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
+    loadVendors(currentPage);
+  }, [currentPage]);
 
-  async function loadVendors() {
+  async function loadVendors(page = 0) {
     try {
       setLoading(true);
-      const data = await vendorApi.getAll();
-      setVendors(data);
-      setFilteredVendors(data);
+      const response = await vendorApi.getAll(page, PAGE_SIZE);
+      const items = response.content ?? [];
+      const normalised = items.map((v: any) => ({
+        ...v,
+        id: String(v.id || v.vendorId),
+        category: v.category || v.categoryName || "Uncategorized",
+        status: v.status || (v.complianceStatus === "Verified" ? "ACTIVE" : "PENDING"),
+        verified: v.verified ?? (v.complianceStatus === "Verified"),
+        phone: v.phone || v.phoneNumber,
+      }));
+      setVendors(normalised);
+      setFilteredVendors(normalised);
+      setTotalPages(response.totalPages ?? 0);
+      setTotalElements(response.totalElements ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load vendors");
     } finally {
@@ -88,26 +133,26 @@ export default function VendorsPage() {
     }
   }
 
-  // Filter vendors based on search query
+  // Filter vendors based on search query and status
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredVendors(vendors);
-    } else {
+    let filtered = vendors;
+    if (statusFilter !== "ALL") {
+      filtered = filtered.filter(v => v.status === statusFilter || v.complianceStatus === statusFilter);
+    }
+    if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      setFilteredVendors(
-        vendors.filter(
-          (v) =>
-            v.companyName?.toLowerCase().includes(query) ||
-            v.email?.toLowerCase().includes(query) ||
-            v.category?.toLowerCase().includes(query)
-        )
+      filtered = filtered.filter(
+        (v) =>
+          v.companyName?.toLowerCase().includes(query) ||
+          v.email?.toLowerCase().includes(query) ||
+          v.category?.toLowerCase().includes(query)
       );
     }
-  }, [searchQuery, vendors]);
+    setFilteredVendors(filtered);
+  }, [searchQuery, vendors, statusFilter]);
 
   // Export vendors to CSV
-  function handleExport() {
-    const headers = ["Company Name", "Email", "Phone", "Category", "Status", "Verified", "Rating", "Total Orders", "Compliance"];
+  function handleExport() {    const headers = ["Company Name", "Email", "Phone", "Category", "Status", "Verified", "Rating", "Total Orders", "Compliance"];
     const rows = filteredVendors.map(v => [
       v.companyName,
       v.email,
@@ -131,7 +176,24 @@ export default function VendorsPage() {
     
     toast({ title: "Export Complete", description: `${filteredVendors.length} vendors exported to CSV` });
   }
+
+  async function confirmDeactivate() {
+    if (!vendorToDeactivate) return;
+    try {
+      setDeactivateLoading(true);
+      await vendorApi.updateStatus(vendorToDeactivate.id, "INACTIVE");
+      toast({ title: "Vendor deactivated", description: `${vendorToDeactivate.companyName} has been deactivated.` });
+      setDeactivateDialogOpen(false);
+      setVendorToDeactivate(null);
+      loadVendors(currentPage);
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to deactivate vendor", variant: "destructive" });
+    } finally {
+      setDeactivateLoading(false);
+    }
+  }
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -144,17 +206,19 @@ export default function VendorsPage() {
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Export
             </Button>
+            {canCreate && (
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Add Vendor
             </Button>
+            )}
           </div>
         </div>
 
         {error && (
           <div className="rounded-md bg-destructive/15 p-4 text-destructive">
             <p>{error}</p>
-            <Button variant="outline" size="sm" onClick={loadVendors} className="mt-2">
+            <Button variant="outline" size="sm" onClick={() => loadVendors(currentPage)} className="mt-2">
               Retry
             </Button>
           </div>
@@ -209,11 +273,18 @@ export default function VendorsPage() {
                   className="pl-8 h-8 text-xs w-[200px] border-gray-200"
                 />
               </div>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toast({ title: "Filter", description: "Advanced filtering coming soon!" })}>
-                <Filter className="mr-1.5 h-3.5 w-3.5" />
-                Filter
-              </Button>
-            </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-8 text-xs w-[130px]">
+                  <Filter className="mr-1.5 h-3.5 w-3.5" />
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="Verified">Verified</SelectItem>
+                </SelectContent>
+              </Select>            </div>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -285,7 +356,7 @@ export default function VendorsPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="text-xs" onClick={() => { setSelectedVendor(vendor); setDialogOpen(true); }}>
                                 <Eye className="h-3.5 w-3.5 mr-1.5" />
-                                View / Edit
+                                {canUpdate ? "View / Edit" : "View"}
                               </DropdownMenuItem>
                               <DropdownMenuItem className="text-xs" onClick={() => router.push(`/orders?vendor=${vendor.id}`)}>
                                 <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
@@ -301,7 +372,7 @@ export default function VendorsPage() {
                                 <FileText className="h-3.5 w-3.5 mr-1.5" />
                                 Documents
                               </DropdownMenuItem>
-                              {!vendor.verified && (
+                              {canVerify && !vendor.verified && (
                                 <DropdownMenuItem className="text-xs" onClick={async () => {
                                   try {
                                     await vendorApi.verify(vendor.id);
@@ -318,28 +389,18 @@ export default function VendorsPage() {
                                   Verify Vendor
                                 </DropdownMenuItem>
                               )}
+                              {canDelete && (
+                                <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
                                 className="text-xs text-red-600" 
-                                onClick={async () => {
-                                  if (confirm(`Are you sure you want to deactivate ${vendor.companyName}?`)) {
-                                    try {
-                                      await vendorApi.updateStatus(vendor.id, "INACTIVE");
-                                      toast({ title: "Vendor deactivated", description: `${vendor.companyName} has been deactivated.` });
-                                      loadVendors();
-                                    } catch (error) {
-                                      toast({ 
-                                        title: "Error", 
-                                        description: error instanceof Error ? error.message : "Failed to deactivate vendor",
-                                        variant: "destructive"
-                                      });
-                                    }
-                                  }
-                                }}
+                                onClick={() => { setVendorToDeactivate(vendor); setDeactivateDialogOpen(true); }}
                               >
                                 <Ban className="h-3.5 w-3.5 mr-1.5" />
                                 Deactivate
                               </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -350,20 +411,50 @@ export default function VendorsPage() {
               </Table>
             )}
           </CardContent>
+          <PaginationControls
+            page={currentPage}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            size={PAGE_SIZE}
+            onPageChange={(p) => setCurrentPage(p)}
+            loading={loading}
+          />
         </Card>
       </div>
       
       <VendorDialog 
         open={dialogOpen} 
         onOpenChange={setDialogOpen} 
-        onSuccess={loadVendors} 
+        onSuccess={() => loadVendors(currentPage)} 
       />
       <VendorDocumentDialog
         open={documentDialogOpen}
         onOpenChange={setDocumentDialogOpen}
         vendor={selectedVendor}
-        onSuccess={loadVendors}
+        onSuccess={() => loadVendors(currentPage)}
       />
+
+      {/* Deactivate Confirm Dialog */}
+      <Dialog open={deactivateDialogOpen} onOpenChange={setDeactivateDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Deactivate Vendor</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to deactivate <strong>{vendorToDeactivate?.companyName}</strong>? They will no longer be able to receive new orders.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeactivateDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" size="sm" disabled={deactivateLoading} onClick={confirmDeactivate}>
+              {deactivateLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
+    </RequireRole>
   );
 }
+
+

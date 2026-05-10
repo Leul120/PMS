@@ -2,83 +2,153 @@
 // Use relative /api path so requests go through Next.js rewrites to backend
 const API_BASE_URL = '/api';
 
-// Get auth token from localStorage
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+export interface PagedResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  last: boolean;
+}
+
+/** Unwraps a PagedResponse or plain array — handles both old and new backend responses. */
+function unwrapPage<T>(data: PagedResponse<T> | T[]): T[] {
+  if (Array.isArray(data)) return data;
+  return data.content ?? [];
+}
+
+// ── Auth state helpers ────────────────────────────────────────────────────────
+
+function getStoredState(): { token: string | null; user: any | null } {
+  if (typeof window === 'undefined') return { token: null, user: null };
+  try {
+    const stored = localStorage.getItem('auth-storage');
+    if (!stored) return { token: null, user: null };
+    const parsed = JSON.parse(stored);
+    return {
+      token: parsed?.state?.token ?? null,
+      user: parsed?.state?.user ?? null,
+    };
+  } catch {
+    return { token: null, user: null };
+  }
+}
+
 function getToken(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token');
+  const token = getStoredState().token;
+  if (!token) return null;
+  
+  // Validate JWT token format (must have exactly 2 periods)
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    console.error('Invalid JWT token format - clearing authentication');
+    handleAuthError();
+    return null;
   }
-  return null;
+  
+  // Basic validation of each part (should be base64)
+  for (const part of parts) {
+    if (!part || part.length === 0) {
+      console.error('Invalid JWT token structure - clearing authentication');
+      handleAuthError();
+      return null;
+    }
+  }
+  
+  return token;
 }
 
-// Get user ID from localStorage
 function getUserId(): string | null {
-  if (typeof window !== 'undefined') {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        return user.id || user.userId || null;
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
+  const user = getStoredState().user;
+  if (!user) return null;
+  const raw = user.id || user.userId;
+  if (!raw && raw !== 0) return null;
+  const str = String(raw);
+  return str.trim() !== '' ? str : null;
 }
 
-// Handle auth errors by clearing storage and redirecting
-function handleAuthError(status: number) {
+/** Returns the role string stored in the auth state (e.g. "MANAGER") */
+function getUserRole(): string | null {
+  const user = getStoredState().user;
+  if (!user) return null;
+  const raw = user.role || user.roleName;
+  if (!raw) return null;
+  const str = String(raw).trim();
+  return str !== '' ? str : null;
+}
+
+// ── Auth error handler ────────────────────────────────────────────────────────
+
+function handleAuthError() {
+  console.warn('Authentication error detected - clearing session');
   if (typeof window !== 'undefined') {
-    if (status === 401) {
-      // Token expired or invalid - clear auth and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { useAuthStore } = require('@/lib/auth-store');
+      useAuthStore.getState().logout();
+    } catch {
+      localStorage.removeItem('auth-storage');
     }
+    // Clear any remaining auth data
+    localStorage.removeItem('auth-storage');
+    sessionStorage.removeItem('sessionActive');
+    window.location.href = '/login';
   }
 }
 
-// Generic fetch wrapper
+// Function to manually clear invalid authentication
+export function clearInvalidAuth() {
+  console.warn('Clearing invalid authentication data');
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('auth-storage');
+    sessionStorage.removeItem('sessionActive');
+    window.location.href = '/login';
+  }
+}
+
+// ── Generic fetch wrapper ─────────────────────────────────────────────────────
+
 async function fetchApi<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const token = getToken();
-  
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
   };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  // Add X-User-Id header for backend services that need it
+
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const userId = getUserId();
-  if (userId) {
-    headers['X-User-Id'] = userId;
-  }
-  
+  if (userId) headers['X-User-Id'] = userId;
+
+  // Send role so backend endpoints that require X-User-Role don't fail
+  const role = getUserRole();
+  if (role) headers['X-User-Role'] = role;
+
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-    
-    // Handle auth errors
+    const response = await fetch(url, { ...options, headers });
+
     if (response.status === 401) {
-      handleAuthError(401);
+      handleAuthError();
       throw new Error('Session expired. Please sign in again.');
     }
-    
+
     if (response.status === 403) {
       throw new Error('You do not have permission to perform this action.');
     }
-    
+
+    if (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
+      // Service is down or has an internal error — throw a clear message, not a generic crash
+      throw new Error(`Service temporarily unavailable (${response.status}). Please try again later.`);
+    }
+
     if (!response.ok) {
-      // Read body once as text, then try to parse as JSON
       const bodyText = await response.text();
       let errorMessage: string;
       try {
@@ -89,14 +159,18 @@ async function fetchApi<T>(
       }
       throw new Error(errorMessage);
     }
-    
-    if (response.status === 204) {
-      return {} as T;
+
+    if (response.status === 204) return {} as T;
+
+    // Some endpoints return plain text (e.g. scoring calculate)
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      return text as unknown as T;
     }
-    
+
     return response.json();
   } catch (error) {
-    // Re-throw network errors with better message
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Network error. Please check your connection and try again.');
     }
@@ -104,23 +178,49 @@ async function fetchApi<T>(
   }
 }
 
-// Auth APIs
+// ── Auth APIs ─────────────────────────────────────────────────────────────────
+
 export const authApi = {
   login: (email: string, password: string) =>
-    fetchApi<{ accessToken: string; tokenType: string; userId: string | number; email: string; fullName: string; role: string }>('/auth/login', {
+    fetchApi<{
+      accessToken: string;
+      tokenType: string;
+      userId: number;
+      email: string;
+      fullName: string;
+      role: string;
+    }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
 
-  register: (data: { email: string; password: string; firstName?: string; lastName?: string; fullName?: string; phoneNumber?: string; roleName?: string }) =>
+  register: (data: {
+    fullName?: string;
+    email: string;
+    password: string;
+    phoneNumber?: string;
+    roleName?: string;
+  }) =>
     fetchApi('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  getMe: () => fetchApi('/auth/me'),
+  forgotPassword: (email: string) =>
+    fetchApi('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
 
-  // User management (Admin only)
+  resetPassword: (token: string, newPassword: string) =>
+    fetchApi('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
+
+  getMe: () => fetchApi<any>('/auth/me'),
+
+  /** Returns users with active/accountLocked fields (enriched by backend) */
   getAllUsers: () => fetchApi<any[]>('/auth/users'),
   updateUser: (userId: string, data: any) =>
     fetchApi(`/auth/users/${userId}`, {
@@ -129,31 +229,45 @@ export const authApi = {
     }),
 };
 
-// Admin APIs (Admin only endpoints)
+// ── Admin APIs ────────────────────────────────────────────────────────────────
+
 export const adminApi = {
-  // User management
-  getAllUsers: () => fetchApi<any[]>('/auth/admin/users'),
-  createUser: (data: { fullName: string; email: string; password: string; phoneNumber?: string; roleName: string }) =>
+  /** GET /api/auth/users — routed via auth-service */
+  getAllUsers: () => fetchApi<any[]>('/auth/users'),
+
+  createUser: (data: {
+    fullName: string;
+    email: string;
+    password: string;
+    phoneNumber?: string;
+    roleName: string;
+  }) =>
     fetchApi('/auth/admin/users', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
   updateUser: (userId: string, data: any) =>
     fetchApi(`/auth/users/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
   deleteUser: (userId: string) =>
-    fetchApi(`/admin/users/${userId}`, { method: 'DELETE' }),
+    fetchApi(`/auth/admin/users/${userId}`, { method: 'DELETE' }),
+
   assignRole: (userId: string, roleName: string) =>
     fetchApi(`/auth/admin/users/${userId}/role`, {
       method: 'PUT',
       body: JSON.stringify({ roleName }),
     }),
+
   lockAccount: (userId: string) =>
     fetchApi(`/auth/admin/users/${userId}/lock`, { method: 'POST' }),
+
   unlockAccount: (userId: string) =>
-    fetchApi(`/auth/users/${userId}/unlock`, { method: 'POST' }),
+    fetchApi(`/auth/admin/users/${userId}/unlock`, { method: 'POST' }),
+
   resetPassword: (userId: string, newPassword: string) =>
     fetchApi(`/auth/admin/users/${userId}/reset-password`, {
       method: 'POST',
@@ -161,240 +275,409 @@ export const adminApi = {
     }),
 };
 
-// Vendor APIs
+// ── Vendor APIs ───────────────────────────────────────────────────────────────
+
 export const vendorApi = {
-  getAll: () => fetchApi<any[]>('/vendors'),
-  getById: (id: string) => fetchApi(`/vendors/${id}`),
-  getByStatus: (status: string) => fetchApi(`/vendors/status/${status}`),
-  register: (data: any) =>
+  /** Returns a PagedResponse. Use page/size params or omit for defaults (page=0, size=50). */
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/vendors?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/vendors?page=0&size=200').then(unwrapPage),
+  getById: (id: string | number) => fetchApi<any>(`/vendors/${id}`),
+  getByUserId: (userId: string | number) => fetchApi<any>(`/vendors/user/${userId}`),
+  getByStatus: (status: string) => fetchApi<any[]>(`/vendors/status/${status}`),
+  getCategories: () => fetchApi<any[]>('/vendors/categories'),
+
+  register: (data: {
+    companyName: string;
+    contactPerson: string;
+    email: string;
+    categoryId: number;
+    phoneNumber?: string;
+    address?: string;
+    taxId?: string;
+  }) =>
     fetchApi('/vendors/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  verify: (id: string) =>
+
+  update: (id: string | number, data: any) =>
+    fetchApi(`/vendors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  verify: (id: string | number) =>
     fetchApi(`/vendors/${id}/verify`, { method: 'POST' }),
-  updateStatus: (id: string, status: string) =>
-    fetchApi(`/vendors/${id}/status?status=${status}`, { method: 'PUT' }),
-  // Document methods
-  getDocuments: (vendorId: string) =>
+
+  updateStatus: (id: string | number, status: string) =>
+    fetchApi(`/vendors/${id}/status?status=${encodeURIComponent(status)}`, { method: 'PUT' }),
+
+  getDocuments: (vendorId: string | number) =>
     fetchApi<any[]>(`/vendors/${vendorId}/documents`),
-  uploadDocument: (vendorId: string, data: any) =>
+
+  uploadDocument: (vendorId: string | number, data: any) =>
     fetchApi(`/vendors/${vendorId}/documents`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  deleteDocument: (documentId: string) =>
+
+  deleteDocument: (documentId: string | number) =>
     fetchApi(`/vendors/documents/${documentId}`, { method: 'DELETE' }),
+
   getExpiringDocuments: (date: string) =>
     fetchApi<any[]>(`/vendors/documents/expiring?date=${date}`),
 };
 
-// Purchase Order APIs
+// ── Purchase Order APIs ───────────────────────────────────────────────────────
+
 export const poApi = {
-  getAll: () => fetchApi<any[]>('/purchase-orders'),
-  getById: (id: string) => fetchApi(`/purchase-orders/${id}`),
-  create: (data: any) =>
+  /** Returns a PagedResponse. Use page/size params or omit for defaults. */
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/purchase-orders?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/purchase-orders?page=0&size=200').then(unwrapPage),
+  getById: (id: string | number) => fetchApi<any>(`/purchase-orders/${id}`),
+
+  /**
+   * Create a PO. Backend requires rfqId + vendorId + totalAmount.
+   * expectedDeliveryDate must be a LocalDate string "YYYY-MM-DD".
+   */
+  create: (data: {
+    rfqId: number;
+    vendorId: number;
+    totalAmount: number;
+    expectedDeliveryDate?: string;
+    bidId?: number;
+  }) =>
     fetchApi('/purchase-orders', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  approve: (id: string) =>
+
+  /** Update mutable fields of an existing PO */
+  update: (id: string | number, data: {
+    vendorId?: number;
+    totalAmount?: number;
+    expectedDeliveryDate?: string;
+  }) =>
+    fetchApi(`/purchase-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  approve: (id: string | number) =>
     fetchApi(`/purchase-orders/${id}/approve`, { method: 'POST' }),
-  reject: (id: string) =>
+
+  reject: (id: string | number) =>
     fetchApi(`/purchase-orders/${id}/reject`, { method: 'POST' }),
-  updateStatus: (id: string, status: string) =>
-    fetchApi(`/purchase-orders/${id}/status?status=${status}`, { method: 'PUT' }),
+
+  updateStatus: (id: string | number, status: string) =>
+    fetchApi(`/purchase-orders/${id}/status?status=${encodeURIComponent(status)}`, { method: 'PUT' }),
 };
 
-// RFQ APIs
+// ── RFQ APIs ──────────────────────────────────────────────────────────────────
+
 export const rfqApi = {
-  getAll: () => fetchApi<any[]>('/rfqs'),
-  getById: (id: string) => fetchApi(`/rfqs/${id}`),
-  getByStatus: (status: string) => fetchApi(`/rfqs/status/${status}`),
-  create: (data: any) =>
+  /** Returns a PagedResponse. Use page/size params or omit for defaults. */
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/rfqs?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/rfqs?page=0&size=200').then(unwrapPage),
+  getById: (id: string | number) => fetchApi<any>(`/rfqs/${id}`),
+  getByStatus: (status: string) => fetchApi<any[]>(`/rfqs/status/${status}`),
+
+  create: (data: {
+    title: string;
+    description?: string;
+    deadline: string; // ISO string — backend accepts LocalDateTime
+    estimatedValue?: number;
+    categoryId?: number;
+    expectedQuantity?: number;
+  }) =>
     fetchApi('/rfqs', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  close: (id: string) =>
+
+  update: (id: string | number, data: any) =>
+    fetchApi(`/rfqs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  close: (id: string | number) =>
     fetchApi(`/rfqs/${id}/close`, { method: 'POST' }),
 };
 
-// Bid APIs
+// ── Bid APIs ──────────────────────────────────────────────────────────────────
+
 export const bidApi = {
-  getByRfq: (rfqId: string) => fetchApi(`/bids/rfq/${rfqId}`),
-  getByVendor: (vendorId: string) => fetchApi(`/bids/vendor/${vendorId}`),
-  getRanked: (rfqId: string) => fetchApi(`/bids/rfq/${rfqId}/ranked`),
-  submit: (data: any) =>
+  /** Response includes id, vendorName, deliveryTime, score aliases */
+  getByRfq: (rfqId: string | number) => fetchApi<any[]>(`/bids/rfq/${rfqId}`),
+  getByVendor: (vendorId: string | number) => fetchApi<any[]>(`/bids/vendor/${vendorId}`),
+  getRanked: (rfqId: string | number) => fetchApi<any[]>(`/bids/rfq/${rfqId}/ranked`),
+
+  submit: (data: {
+    rfqId: number;
+    vendorId: number;
+    bidAmount: number;
+    proposalText?: string;
+    deliveryDays?: number;
+  }) =>
     fetchApi('/bids', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  evaluate: (bidId: string) =>
+
+  evaluate: (bidId: string | number) =>
     fetchApi(`/bids/${bidId}/evaluate`, { method: 'POST' }),
-  award: (bidId: string) =>
+
+  award: (bidId: string | number) =>
     fetchApi(`/bids/${bidId}/award`, { method: 'POST' }),
 };
 
-// Delivery APIs
+// ── Delivery APIs ─────────────────────────────────────────────────────────────
+
 export const deliveryApi = {
-  getByPO: (poId: string) => fetchApi(`/deliveries/po/${poId}`),
-  create: (data: any) =>
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/deliveries?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/deliveries?page=0&size=200').then(unwrapPage),
+  getByPO: (poId: string | number) => fetchApi<any[]>(`/deliveries/po/${poId}`),
+
+  /** Backend accepts JSON body (DeliveryRequest) */
+  create: (data: {
+    poId: number;
+    vendorId: number;
+    expectedDate?: string;
+    actualDate?: string;
+    quantityDelivered: number;
+    issueNotes?: string;
+    qualityRemarks?: string;
+  }) =>
     fetchApi('/deliveries', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 };
 
-// Invoice APIs
+// ── Invoice APIs ──────────────────────────────────────────────────────────────
+
 export const invoiceApi = {
-  getByPO: (poId: string) => fetchApi(`/invoices/po/${poId}`),
-  create: (data: any) =>
+  /** ADMIN, OFFICER, MANAGER, AUDITOR only — returns 403 for VENDOR */
+  getAll: () => fetchApi<any[]>('/invoices'),
+  getByPO: (poId: string | number) => fetchApi<any[]>(`/invoices/po/${poId}`),
+
+  /** Backend accepts JSON body (InvoiceRequest) */
+  create: (data: {
+    poId: number;
+    invoiceAmount: number;
+    vendorId: number;
+  }) =>
     fetchApi('/invoices', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  validate: (id: string, expectedAmount: number, expectedQuantity: number) =>
-    fetchApi(`/invoices/${id}/validate?expectedAmount=${expectedAmount}&expectedQuantity=${expectedQuantity}`, {
-      method: 'POST',
-    }),
-  dispute: (id: string, reason: string) =>
+
+  validate: (id: string | number, expectedAmount: number, expectedQuantity: number) =>
+    fetchApi(
+      `/invoices/${id}/validate?expectedAmount=${expectedAmount}&expectedQuantity=${expectedQuantity}`,
+      { method: 'POST' }
+    ),
+
+  dispute: (id: string | number, reason: string) =>
     fetchApi(`/invoices/${id}/dispute?reason=${encodeURIComponent(reason)}`, {
       method: 'POST',
     }),
 };
 
-// Scoring APIs
+// ── Scoring APIs ──────────────────────────────────────────────────────────────
+
 export const scoringApi = {
-  getRanking: () => fetchApi('/scores/ranking'),
-  getByVendor: (vendorId: string) => fetchApi(`/scores/vendor/${vendorId}`),
-  calculate: (vendorId: string) =>
-    fetchApi(`/scores/calculate/${vendorId}`, { method: 'POST' }),
+  getRanking: () => fetchApi<any[]>('/scores/ranking'),
+  getByVendor: (vendorId: string | number) => fetchApi<any[]>(`/scores/vendor/${vendorId}`),
+  /** Returns a plain string message, not JSON */
+  calculate: (vendorId: string | number) =>
+    fetchApi<string>(`/scores/calculate/${vendorId}`, { method: 'POST' }),
 };
+// ── Analytics APIs ────────────────────────────────────────────────────────────
 
-// Analytics APIs
 export const analyticsApi = {
-  getDashboard: () => fetchApi('/dashboard/overview'),
-  getSpendReport: () => fetchApi('/reports/spend'),
-  getComplianceReport: () => fetchApi('/reports/compliance'),
-  getActivity: (userId?: string) => fetchApi<any>(`/analytics/activity${userId ? `?userId=${userId}` : ''}`),
-  getVendorComparison: (vendorIds: string[]) =>
-    fetchApi(`/reports/vendor-comparison?vendorIds=${vendorIds.join(',')}`),
+  getDashboard: () => fetchApi<any>('/dashboard/overview'),
+  getSpendReport: () => fetchApi<any>('/reports/spend'),
+  getComplianceReport: () => fetchApi<any>('/reports/compliance'),
+
+  /** userId is required by the backend */
+  getActivity: (userId: string | number) =>
+    fetchApi<any>(`/analytics/activity?userId=${userId}`),
+
+  getVendorComparison: (vendorIds: (string | number)[]) =>
+    fetchApi<any>(`/reports/vendor-comparison?vendorIds=${vendorIds.join(',')}`),
 };
 
-// Inventory APIs
+// ── Inventory APIs ────────────────────────────────────────────────────────────
+
 export const inventoryApi = {
-  getAll: () => fetchApi<any[]>('/inventory'),
-  getById: (id: string) => fetchApi(`/inventory/${id}`),
-  create: (data: any) =>
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/inventory?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/inventory?page=0&size=200').then(unwrapPage),
+  getById: (id: string | number) => fetchApi<any>(`/inventory/${id}`),
+
+  create: (data: {
+    itemCode: string;
+    name: string;
+    description?: string;
+    quantity: number;
+    minStock: number;
+    maxStock: number;
+    unit?: string;
+    location?: string;
+    category?: string;
+  }) =>
     fetchApi('/inventory', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: any) =>
+
+  update: (id: string | number, data: any) =>
     fetchApi(`/inventory/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  delete: (id: string) =>
+
+  delete: (id: string | number) =>
     fetchApi(`/inventory/${id}`, { method: 'DELETE' }),
-  adjustStock: (id: string, quantityChange: number) =>
+
+  adjustStock: (id: string | number, quantityChange: number) =>
     fetchApi(`/inventory/${id}/adjust`, {
       method: 'POST',
       body: JSON.stringify({ quantityChange }),
     }),
+
   getLowStock: () => fetchApi<any[]>('/inventory/low-stock'),
 };
 
-// Settings APIs
+// ── Settings APIs ─────────────────────────────────────────────────────────────
+
 export const settingsApi = {
   getSettings: () => fetchApi<any>('/auth/settings'),
   updateSettings: (data: any) =>
-    fetchApi('/auth/settings', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    fetchApi('/auth/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
   getNotifications: () => fetchApi<any>('/auth/settings/notifications'),
   updateNotifications: (data: any) =>
-    fetchApi('/auth/settings/notifications', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    fetchApi('/auth/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
+
   getSecurity: () => fetchApi<any>('/auth/settings/security'),
   updateSecurity: (data: any) =>
-    fetchApi('/auth/settings/security', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    fetchApi('/auth/settings/security', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
-// Requisition APIs
+// ── Requisition APIs ──────────────────────────────────────────────────────────
+
 export const requisitionApi = {
-  getAll: () => fetchApi<any[]>('/procurement/requisitions'),
-  getById: (id: string) => fetchApi<any>(`/procurement/requisitions/${id}`),
-  create: (data: any) =>
+  getAll: (page = 0, size = 50) =>
+    fetchApi<PagedResponse<any>>(`/procurement/requisitions?page=${page}&size=${size}`),
+  getAllList: () =>
+    fetchApi<PagedResponse<any>>('/procurement/requisitions?page=0&size=200').then(unwrapPage),
+  getById: (id: string | number) => fetchApi<any>(`/procurement/requisitions/${id}`),
+
+  create: (data: {
+    department: string;
+    justification?: string;
+    estimatedBudget: number;
+    items: Array<{
+      itemName: string;
+      description?: string;
+      quantity: number;
+      unit?: string;
+      estimatedUnitPrice: number;
+      category?: string;
+    }>;
+  }) =>
     fetchApi('/procurement/requisitions', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
   getMyRequisitions: () => fetchApi<any[]>('/procurement/requisitions/my-requisitions'),
-  getByStatus: (status: string) => fetchApi<any[]>(`/procurement/requisitions/status/${status}`),
-  approve: (id: string, data: any) =>
+  getByStatus: (status: string) =>
+    fetchApi<any[]>(`/procurement/requisitions/status/${status}`),
+
+  approve: (id: string | number, data: { decision: string; comments?: string }) =>
     fetchApi(`/procurement/requisitions/${id}/approve`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 };
 
-// 3-Way Match APIs
+// ── 3-Way Match APIs ──────────────────────────────────────────────────────────
+
 export const threeWayMatchApi = {
-  validate: (poId: string, deliveryId: string, invoiceId: string, poAmount: number, poQuantity: number): Promise<{ status: string; mismatchReason?: string }> =>
+  /** Backend now accepts JSON body (ThreeWayMatchRequest) */
+  validate: (
+    poId: number,
+    deliveryId: number,
+    invoiceId: number,
+    poAmount: number,
+    poQuantity: number
+  ): Promise<{ status: string; mismatchReason?: string }> =>
     fetchApi('/threewaymatch/validate', {
       method: 'POST',
       body: JSON.stringify({ poId, deliveryId, invoiceId, poAmount, poQuantity }),
     }),
-  getByPO: (poId: string) => fetchApi<any>(`/threewaymatch/po/${poId}`),
+
+  getByPO: (poId: string | number) => fetchApi<any>(`/threewaymatch/po/${poId}`),
 };
 
-// Dispute APIs
+// ── Dispute APIs ──────────────────────────────────────────────────────────────
+
 export const disputeApi = {
-  raise: (data: any) =>
+  raise: (data: {
+    poId: number;
+    deliveryId?: number;
+    invoiceId?: number;
+    disputeType: string;
+    description: string;
+  }) =>
     fetchApi('/disputes', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
   getAll: () => fetchApi<any[]>('/disputes'),
-  getById: (id: string) => fetchApi<any>(`/disputes/${id}`),
-  resolve: (id: string, data: any) =>
+  getById: (id: string | number) => fetchApi<any>(`/disputes/${id}`),
+
+  resolve: (id: string | number, data: { resolution: string }) =>
     fetchApi(`/disputes/${id}/resolve`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
   getByStatus: (status: string) => fetchApi<any[]>(`/disputes/status/${status}`),
 };
 
-// Notification APIs
-export const notificationApi = {
-  getUserNotifications: (userId: string) => fetchApi<any[]>(`/notifications/user/${userId}`),
-  getUnread: (userId: string) => fetchApi<any[]>(`/notifications/user/${userId}/unread`),
-  markAsRead: (id: string) =>
-    fetchApi(`/notifications/${id}/read`, {
-      method: 'POST',
-    }),
-  create: (data: any) =>
-    fetchApi('/notifications', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+// ── Audit Log APIs ────────────────────────────────────────────────────────────
+
+export const auditApi = {
+  getAll: () => fetchApi<any[]>('/auth/audit-logs'),
 };
 
-// Types
-export interface Vendor {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  status: string;
-  createdAt: string;
-}
+// ── Notification APIs ─────────────────────────────────────────────────────────
+
+export const notificationApi = {
+  getUserNotifications: (userId: string | number) =>
+    fetchApi<any[]>(`/notifications/user/${userId}`),
+
+  getUnread: (userId: string | number) =>
+    fetchApi<any[]>(`/notifications/user/${userId}/unread`),
+
+  markAsRead: (id: string | number) =>
+    fetchApi(`/notifications/${id}/read`, { method: 'POST' }),
+
+  create: (data: any) =>
+    fetchApi('/notifications', { method: 'POST', body: JSON.stringify(data) }),
+};

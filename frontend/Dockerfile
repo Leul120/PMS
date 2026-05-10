@@ -13,6 +13,10 @@ RUN npm install
 FROM node:18-alpine AS builder
 WORKDIR /app
 
+# Accept build arguments for API Gateway URL
+ARG API_GATEWAY_URL
+ENV API_GATEWAY_URL=${API_GATEWAY_URL:-http://api-gateway:8080}
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

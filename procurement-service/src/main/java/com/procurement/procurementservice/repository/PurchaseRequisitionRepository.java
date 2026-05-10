@@ -1,6 +1,8 @@
 package com.procurement.procurementservice.repository;
 
 import com.procurement.procurementservice.entity.PurchaseRequisition;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,4 +15,5 @@ public interface PurchaseRequisitionRepository extends JpaRepository<PurchaseReq
     List<PurchaseRequisition> findByStatus(String status);
     List<PurchaseRequisition> findByDepartment(String department);
     Optional<PurchaseRequisition> findByRequisitionNumber(String requisitionNumber);
+    Page<PurchaseRequisition> findAll(Pageable pageable);
 }

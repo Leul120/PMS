@@ -1,13 +1,23 @@
-server:
+﻿server:
   port: 8085
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: delivery-invoice-service
   datasource:
     url: jdbc:postgresql://localhost:5436/deliverydb
     username: postgres
     password: secret
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: create-drop
   kafka:
@@ -15,8 +25,15 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
     consumer:
       group-id: delivery-service-group
+    listener:
+      missing-topics-fatal: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -26,17 +43,19 @@ spring:
   cloud:
     kubernetes:
       discovery:
-        enabled: true
-        all-namespaces: false
+        enabled: false
       loadbalancer:
         mode: service
 
 # Service URLs
 services:
   auth:
-    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
   procurement:
-    url: ${PROCUREMENT_SERVICE_URL:http://procurement-service:8084}
+    url: ${PROCUREMENT_SERVICE_URL:http://localhost:8084}
+
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 
 # Resilience4j Circuit Breaker
 resilience4j:
@@ -52,3 +71,6 @@ resilience4j:
         baseConfig: default
       procurementService:
         baseConfig: default
+
+
+

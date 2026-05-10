@@ -5,6 +5,11 @@ import lombok.Data;
 import java.time.LocalDate;
 
 @Entity
+@Table(name = "delivery", indexes = {
+    @Index(name = "idx_delivery_po_id", columnList = "poId"),
+    @Index(name = "idx_delivery_status", columnList = "deliveryStatus"),
+    @Index(name = "idx_delivery_po_status", columnList = "poId, deliveryStatus")
+})
 @Data
 public class Delivery {
     @Id

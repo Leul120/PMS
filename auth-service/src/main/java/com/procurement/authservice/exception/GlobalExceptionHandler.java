@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -34,16 +35,26 @@ public class GlobalExceptionHandler {
     
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
-        log.error("Runtime exception: {}", ex.getMessage());
-        
-        ErrorResponse error = ErrorResponse.builder()
+        String msg = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
+        HttpStatus status;
+        String error;
+        if (msg.contains("not found")) {
+            status = HttpStatus.NOT_FOUND; error = "Not Found";
+        } else if (msg.contains("already registered") || msg.contains("already exists")) {
+            status = HttpStatus.CONFLICT; error = "Conflict";
+        } else if (msg.contains("locked") || msg.contains("expired") || msg.contains("invalid")) {
+            status = HttpStatus.UNAUTHORIZED; error = "Unauthorized";
+        } else {
+            status = HttpStatus.BAD_REQUEST; error = "Bad Request";
+        }
+        log.error("[{}] {}", status.value(), ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
             .timestamp(LocalDateTime.now())
-            .status(HttpStatus.BAD_REQUEST.value())
-            .error("Bad Request")
+            .status(status.value())
+            .error(error)
             .message(ex.getMessage())
             .build();
-        
-        return ResponseEntity.badRequest().body(error);
+        return ResponseEntity.status(status).body(errorResponse);
     }
     
     @ExceptionHandler(AccessDeniedException.class)
@@ -68,15 +79,25 @@ public class GlobalExceptionHandler {
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
-        
+
         ErrorResponse error = ErrorResponse.builder()
             .timestamp(LocalDateTime.now())
             .status(HttpStatus.BAD_REQUEST.value())
             .error("Validation Error")
             .message(errors.toString())
             .build();
-        
+
         return ResponseEntity.badRequest().body(error);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String message = String.format("Invalid value '%s' for parameter '%s'. Expected type: %s",
+            ex.getValue(), ex.getName(), ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown");
+        log.warn("Type mismatch: {}", message);
+        return ResponseEntity.badRequest().body(ErrorResponse.builder()
+            .timestamp(LocalDateTime.now()).status(HttpStatus.BAD_REQUEST.value())
+            .error("Type Mismatch").message(message).build());
     }
     
     @ExceptionHandler(Exception.class)

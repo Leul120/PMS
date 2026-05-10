@@ -52,10 +52,25 @@ public class VendorClient {
                 .block();
     }
 
+    /** Returns the company name for a vendor, or a safe fallback if the service is unavailable. */
+    public String getVendorName(Long vendorId) {
+        if (vendorId == null) return null;
+        try {
+            Map<String, Object> vendor = getVendorById(vendorId);
+            if (vendor != null) {
+                Object name = vendor.get("companyName");
+                if (name != null) return name.toString();
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve vendor name for id {}: {}", vendorId, e.getMessage());
+        }
+        return "Vendor #" + vendorId;
+    }
+
     // Fallback methods
     public Map<String, Object> getVendorByIdFallback(Long vendorId, Throwable t) {
         log.warn("Vendor service fallback for id {}: {}", vendorId, t.getMessage());
-        return Map.of();
+        return Map.of("companyName", "Vendor #" + vendorId);
     }
 
     public List<Map<String, Object>> getVendorsByIdsFallback(List<Long> vendorIds, Throwable t) {

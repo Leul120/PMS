@@ -48,7 +48,7 @@ spring:
         - id: analytics-service
           uri: http://analytics-service:8087
           predicates:
-            - Path=/api/reports/**,/api/dashboard/**
+            - Path=/api/reports/**,/api/dashboard/**,/api/analytics/**
           filters:
             - StripPrefix=0
         - id: inventory-service
@@ -63,14 +63,41 @@ spring:
             - Path=/api/notifications/**
           filters:
             - StripPrefix=0
+        - id: delivery-invoice-service-extra
+          uri: http://delivery-invoice-service:8085
+          predicates:
+            - Path=/api/threewaymatch/**,/api/disputes/**
+          filters:
+            - StripPrefix=0
+        - id: auth-admin-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - StripPrefix=0
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "http://localhost:*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+              - "http://frontend:*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+              - PATCH
+            allowedHeaders:
+              - "*"
             allowCredentials: true
-            exposedHeaders: "*"
+            exposedHeaders:
+              - Authorization
+              - Content-Type
+              - X-User-Id
+              - X-User-Role
+            maxAge: 3600
 
 logging:
   level:

@@ -6,6 +6,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
+@Table(name = "invoice", indexes = {
+    @Index(name = "idx_invoice_po_id", columnList = "poId"),
+    @Index(name = "idx_invoice_status", columnList = "status"),
+    @Index(name = "idx_invoice_discrepancy", columnList = "discrepancyFlag")
+})
 @Data
 public class Invoice {
     @Id

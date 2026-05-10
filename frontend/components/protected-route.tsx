@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, validateAndCleanAuth } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
 import { Loader2 } from "lucide-react";
 
@@ -31,18 +31,21 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     // Subscribe to hydration finish
     const unsub = useAuthStore.persist?.onFinishHydration?.(() => {
       setIsHydrated(true);
+      // Validate authentication state after hydration
+      validateAndCleanAuth();
     });
     
-    // Fallback: check hydration status periodically (max 2 seconds)
+    // Fallback: check hydration status periodically (max 5 seconds, then assume not hydrated = not logged in)
     let attempts = 0;
-    const maxAttempts = 20; // 20 * 100ms = 2 seconds
+    const maxAttempts = 50; // 50 * 100ms = 5 seconds
     const interval = setInterval(() => {
       attempts++;
       if (useAuthStore.persist?.hasHydrated?.()) {
         setIsHydrated(true);
+        validateAndCleanAuth();
         clearInterval(interval);
       } else if (attempts >= maxAttempts) {
-        // Force hydration after timeout
+        // After timeout, mark as hydrated — if no auth state was loaded, the redirect to /login will fire
         setIsHydrated(true);
         clearInterval(interval);
       }

@@ -1,23 +1,46 @@
-server:
+﻿server:
   port: 8086
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: scoring-service
   datasource:
     url: jdbc:postgresql://localhost:5437/scoringdb
     username: postgres
     password: secret
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
+    open-in-view: false
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
     consumer:
       group-id: scoring-service-group
       auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.procurement.*,java.util.*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: java.util.HashMap
+    listener:
+      missing-topics-fatal: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -27,15 +50,14 @@ spring:
   cloud:
     kubernetes:
       discovery:
-        enabled: true
-        all-namespaces: false
+        enabled: false
       loadbalancer:
         mode: service
 
 # Service URLs
 services:
   auth:
-    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
 
 scoring:
   weights:
@@ -43,6 +65,9 @@ scoring:
     quality: 0.35
     cost: 0.20
     responsiveness: 0.10
+
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 
 # Resilience4j Circuit Breaker
 resilience4j:
@@ -56,3 +81,6 @@ resilience4j:
     instances:
       authService:
         baseConfig: default
+
+
+

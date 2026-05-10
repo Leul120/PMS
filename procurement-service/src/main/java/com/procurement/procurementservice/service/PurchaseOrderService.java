@@ -3,10 +3,14 @@ package com.procurement.procurementservice.service;
 import com.procurement.procurementservice.dto.*;
 import com.procurement.procurementservice.entity.PurchaseOrder;
 import com.procurement.procurementservice.event.POApprovedEvent;
+import com.procurement.procurementservice.infrastructure.client.VendorClient;
 import com.procurement.procurementservice.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +29,7 @@ public class PurchaseOrderService {
     
     private final PurchaseOrderRepository poRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final VendorClient vendorClient;
     
     @Value("${approval.threshold.manager:10000}")
     private BigDecimal managerThreshold;
@@ -56,15 +62,27 @@ public class PurchaseOrderService {
         
         if ("Approved".equals(savedPO.getStatus())) {
             publishApprovedEvent(savedPO);
+        } else if ("Pending Approval".equals(savedPO.getStatus())) {
+            publishApprovalPendingEvent(savedPO);
         }
         
         return mapToResponse(savedPO);
     }
     
-    public List<PurchaseOrderResponse> getAllPurchaseOrders() {
-        return poRepository.findAll().stream()
-            .map(this::mapToResponse)
-            .collect(Collectors.toList());
+    public PagedResponse<PurchaseOrderResponse> getAllPurchaseOrders(int page, int size) {
+        Page<PurchaseOrder> poPage = poRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        List<PurchaseOrder> orders = poPage.getContent();
+        List<Long> vendorIds = orders.stream()
+            .map(PurchaseOrder::getVendorId).filter(id -> id != null)
+            .distinct().collect(Collectors.toList());
+        Map<Long, String> vendorNames = vendorClient.getVendorNamesBatch(vendorIds);
+        List<PurchaseOrderResponse> content = orders.stream()
+            .map(po -> mapToResponse(po, vendorNames)).collect(Collectors.toList());
+        return PagedResponse.<PurchaseOrderResponse>builder()
+            .content(content).page(poPage.getNumber()).size(poPage.getSize())
+            .totalElements(poPage.getTotalElements()).totalPages(poPage.getTotalPages())
+            .last(poPage.isLast()).build();
     }
     
     public PurchaseOrderResponse getPurchaseOrder(Long poId) {
@@ -132,6 +150,20 @@ public class PurchaseOrderService {
         
         return mapToResponse(updatedPO);
     }
+
+    @Transactional
+    public PurchaseOrderResponse updatePurchaseOrder(Long poId, PurchaseOrderRequest request) {
+        PurchaseOrder po = poRepository.findById(poId)
+            .orElseThrow(() -> new RuntimeException("Purchase Order not found"));
+
+        if (request.getVendorId() != null) po.setVendorId(request.getVendorId());
+        if (request.getTotalAmount() != null) po.setTotalAmount(request.getTotalAmount());
+        if (request.getExpectedDeliveryDate() != null) po.setExpectedDeliveryDate(request.getExpectedDeliveryDate());
+
+        PurchaseOrder updatedPO = poRepository.save(po);
+        log.info("Purchase Order updated: {}", poId);
+        return mapToResponse(updatedPO);
+    }
     
     private void publishApprovedEvent(PurchaseOrder po) {
         POApprovedEvent event = POApprovedEvent.builder()
@@ -146,19 +178,50 @@ public class PurchaseOrderService {
         kafkaTemplate.send("po.approved", event);
         log.info("PO Approved event published: {}", po.getPoId());
     }
+
+    private void publishApprovalPendingEvent(PurchaseOrder po) {
+        Map<String, Object> event = Map.of(
+            "poId", po.getPoId(),
+            "rfqId", po.getRfqId() != null ? po.getRfqId() : 0L,
+            "vendorId", po.getVendorId() != null ? po.getVendorId() : 0L,
+            "totalAmount", po.getTotalAmount(),
+            "createdBy", po.getCreatedBy() != null ? po.getCreatedBy() : 0L,
+            "createdAt", LocalDateTime.now().toString()
+        );
+        kafkaTemplate.send("approval.pending", event);
+        log.info("Approval Pending event published for PO: {}", po.getPoId());
+    }
     
     private PurchaseOrderResponse mapToResponse(PurchaseOrder po) {
+        String vendorName = vendorClient.getVendorName(po.getVendorId());
+        return buildResponse(po, vendorName);
+    }
+
+    private PurchaseOrderResponse mapToResponse(PurchaseOrder po, Map<Long, String> vendorNames) {
+        String vendorName = vendorNames.getOrDefault(po.getVendorId(), "Vendor #" + po.getVendorId());
+        return buildResponse(po, vendorName);
+    }
+
+    private PurchaseOrderResponse buildResponse(PurchaseOrder po, String vendorName) {
+        String poNumber = "PO-" + String.format("%06d", po.getPoId());
         return PurchaseOrderResponse.builder()
             .poId(po.getPoId())
+            .id(po.getPoId())
+            .poNumber(poNumber)
             .rfqId(po.getRfqId())
             .vendorId(po.getVendorId())
+            .vendorName(vendorName)
             .totalAmount(po.getTotalAmount())
             .managerId(po.getManagerId())
             .status(po.getStatus())
             .issueDate(po.getIssueDate())
+            .createdAt(po.getIssueDate())
             .expectedDeliveryDate(po.getExpectedDeliveryDate())
+            .deliveryDate(po.getExpectedDeliveryDate())
             .approvedBy(po.getApprovedBy())
             .approvalDate(po.getApprovalDate())
             .build();
     }
 }
+
+

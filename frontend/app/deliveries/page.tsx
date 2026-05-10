@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -15,9 +16,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { deliveryApi, poApi, threeWayMatchApi, disputeApi } from "@/lib/api";
+import type { PagedResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryDialog } from "./delivery-dialog";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { RequireRole } from "@/components/require-role";
+import { useAuthStore } from "@/lib/auth-store";
 import { 
   Truck, 
   CheckCircle, 
@@ -55,29 +68,87 @@ export default function DeliveriesPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 50;
+  // 3-way match dialog state
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
+  const [matchDelivery, setMatchDelivery] = useState<Delivery | null>(null);
+  const [matchInvoiceId, setMatchInvoiceId] = useState("");
+  const [matchAmount, setMatchAmount] = useState("");
+  const [matchQuantity, setMatchQuantity] = useState("");
+  const [matchLoading, setMatchLoading] = useState(false);
+  // Dispute dialog state
+  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
+  const [disputeDelivery, setDisputeDelivery] = useState<Delivery | null>(null);
+  const [disputeDescription, setDisputeDescription] = useState("");
+  const [disputeLoading, setDisputeLoading] = useState(false);
   const { toast } = useToast();
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const hasRole = useAuthStore((state) => state.hasRole);
+  const canUpdateDelivery = hasPermission("deliveries:update");
+  const canValidateMatch = hasPermission("three-way-match:validate");
 
-  async function loadDeliveries() {
+  async function loadDeliveries(page = 0) {
     try {
       setLoading(true);
-      const pos = await poApi.getAll() as any[];
-      // Extract deliveries from POs
-      const deliveryItems: Delivery[] = pos
-        .filter((po) => po.deliveryStatus || po.status === "SHIPPED" || po.status === "DELIVERED")
-        .map((po) => ({
-          id: po.id,
-          poId: po.id,
-          poNumber: po.poNumber,
-          vendor: po.vendorName,
-          status: po.deliveryStatus || po.status,
-          trackingNumber: po.trackingNumber,
-          deliveryDate: po.deliveryDate,
-          origin: "Supplier",
-          destination: "Main Warehouse",
-          eta: po.deliveryDate,
-        }));
+      let deliveryItems: Delivery[] = [];
+      let pages = 0;
+      let total = 0;
+      try {
+        const response = await deliveryApi.getAll(page, PAGE_SIZE);
+        const data = response.content ?? [];
+        pages = response.totalPages ?? 0;
+        total = response.totalElements ?? 0;
+        if (data.length > 0) {
+          deliveryItems = data.map((d: any) => ({
+            id: String(d.deliveryId || d.id),
+            poId: String(d.poId || d.purchaseOrderId || d.id),
+            poNumber: d.poNumber,
+            vendor: d.vendorName || d.vendor,
+            vendorName: d.vendorName || d.vendor,
+            quantity: d.quantityDelivered || d.quantity,
+            status: d.deliveryStatus || d.status || "Delivered",
+            trackingNumber: d.trackingNumber,
+            carrier: d.carrier,
+            deliveryDate: d.actualDate || d.deliveryDate,
+            createdAt: d.createdAt,
+            origin: d.origin || "Supplier",
+            destination: d.destination || "Main Warehouse",
+            eta: d.expectedDate || d.eta,
+          }));
+        }
+      } catch {
+        // Delivery endpoint not available â€â€ derive from POs
+      }
+
+      if (deliveryItems.length === 0) {
+        const poResponse = await poApi.getAll(page, PAGE_SIZE);
+        const pos = poResponse.content ?? [];
+        pages = poResponse.totalPages ?? 0;
+        total = poResponse.totalElements ?? 0;
+        deliveryItems = pos
+          .filter((po: any) => po.deliveryStatus || ["SHIPPED","DELIVERED","IN_TRANSIT"].includes(po.status))
+          .map((po: any) => ({
+            id: String(po.id),
+            poId: String(po.id),
+            poNumber: po.poNumber,
+            vendor: po.vendorName,
+            vendorName: po.vendorName,
+            status: po.deliveryStatus || po.status,
+            trackingNumber: po.trackingNumber,
+            deliveryDate: po.deliveryDate,
+            origin: "Supplier",
+            destination: "Main Warehouse",
+            eta: po.deliveryDate,
+          }));
+      }
+
       setDeliveries(deliveryItems);
       setFilteredDeliveries(deliveryItems);
+      setTotalPages(pages);
+      setTotalElements(total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load deliveries");
     } finally {
@@ -129,8 +200,9 @@ export default function DeliveriesPage() {
   }
 
   useEffect(() => {
-    loadDeliveries();
-  }, []);
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"])) return;
+    loadDeliveries(currentPage);
+  }, [currentPage]);
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -143,23 +215,38 @@ export default function DeliveriesPage() {
 
   async function handleThreeWayMatch(poId: string, deliveryId: string, invoiceId: string, poAmount: number, poQuantity: number) {
     try {
-      const result = await threeWayMatchApi.validate(poId, deliveryId, invoiceId, poAmount, poQuantity);
+      setMatchLoading(true);
+      const result = await threeWayMatchApi.validate(
+        parseInt(poId),
+        parseInt(deliveryId),
+        parseInt(invoiceId),
+        poAmount,
+        poQuantity
+      );
       toast({
         title: result.status === 'MATCHED' ? '3-Way Match Successful' : 'Mismatch Detected',
         description: result.status === 'MATCHED' ? 'All values match correctly.' : result.mismatchReason,
         variant: result.status === 'MATCHED' ? 'default' : 'destructive',
       });
+      setMatchDialogOpen(false);
+      setMatchDelivery(null);
+      setMatchInvoiceId("");
+      setMatchAmount("");
+      setMatchQuantity("");
     } catch (err) {
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to perform 3-way match',
         variant: 'destructive',
       });
+    } finally {
+      setMatchLoading(false);
     }
   }
 
   async function handleRaiseDispute(poId: string, deliveryId: string, type: string, description: string) {
     try {
+      setDisputeLoading(true);
       await disputeApi.raise({
         poId: parseInt(poId),
         deliveryId: parseInt(deliveryId),
@@ -170,15 +257,21 @@ export default function DeliveriesPage() {
         title: 'Dispute Raised',
         description: 'Your dispute has been submitted for review.',
       });
+      setDisputeDialogOpen(false);
+      setDisputeDelivery(null);
+      setDisputeDescription("");
     } catch (err) {
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to raise dispute',
         variant: 'destructive',
       });
+    } finally {
+      setDisputeLoading(false);
     }
   }
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -188,7 +281,9 @@ export default function DeliveriesPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>Export</Button>
+            {canUpdateDelivery && (
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>Update Status</Button>
+            )}
           </div>
         </div>
 
@@ -280,31 +375,35 @@ export default function DeliveriesPage() {
                       <TableCell>
                         <div className="flex items-center gap-1 text-xs">
                           <MapPin className="h-3 w-3" />
-                          {delivery.origin || 'Supplier'} → {delivery.destination || 'Warehouse'}
+                          {delivery.origin || 'Supplier'} â†â€™ {delivery.destination || 'Warehouse'}
                         </div>
                       </TableCell>
                       <TableCell className="text-xs">{delivery.carrier || 'N/A'}</TableCell>
                       <TableCell className="text-xs">{delivery.eta || delivery.deliveryDate || 'N/A'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          {canValidateMatch && (
                           <Button 
                             variant="outline" 
                             size="sm"
                             className="h-7 w-7 p-0"
-                            onClick={() => handleThreeWayMatch(delivery.poId, delivery.id, delivery.id, delivery.quantity || 0, delivery.quantity || 0)}
+                            onClick={() => { setMatchDelivery(delivery); setMatchDialogOpen(true); }}
                             title="3-Way Match"
                           >
                             <Scale className="h-3.5 w-3.5" />
                           </Button>
+                          )}
+                          {canUpdateDelivery && (
                           <Button 
                             variant="outline" 
                             size="sm"
                             className="h-7 w-7 p-0"
-                            onClick={() => handleRaiseDispute(delivery.poId, delivery.id, 'DELIVERY_ISSUE', 'Delivery issue reported')}
+                            onClick={() => { setDisputeDelivery(delivery); setDisputeDialogOpen(true); }}
                             title="Raise Dispute"
                           >
                             <MessageSquare className="h-3.5 w-3.5" />
                           </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -313,6 +412,14 @@ export default function DeliveriesPage() {
               </TableBody>
             </Table>
           </CardContent>
+          <PaginationControls
+            page={currentPage}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            size={PAGE_SIZE}
+            onPageChange={(p) => setCurrentPage(p)}
+            loading={loading}
+          />
         </Card>
       </div>
       
@@ -321,6 +428,110 @@ export default function DeliveriesPage() {
         onOpenChange={setDialogOpen} 
         onSuccess={loadDeliveries} 
       />
+
+      {/* 3-Way Match Dialog */}
+      <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>3-Way Match Validation</DialogTitle>
+            <DialogDescription>
+              Enter the invoice details to validate against PO {matchDelivery?.poNumber || matchDelivery?.poId}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Invoice ID</Label>
+              <Input
+                value={matchInvoiceId}
+                onChange={e => setMatchInvoiceId(e.target.value)}
+                placeholder="Enter invoice ID"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">PO Amount ($)</Label>
+                <Input
+                  type="number"
+                  value={matchAmount}
+                  onChange={e => setMatchAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">PO Quantity</Label>
+                <Input
+                  type="number"
+                  value={matchQuantity}
+                  onChange={e => setMatchQuantity(e.target.value)}
+                  placeholder="0"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setMatchDialogOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={!matchInvoiceId || !matchAmount || !matchQuantity || matchLoading}
+              onClick={() => matchDelivery && handleThreeWayMatch(
+                matchDelivery.poId,
+                matchDelivery.id,
+                matchInvoiceId,
+                parseFloat(matchAmount),
+                parseInt(matchQuantity)
+              )}
+            >
+              {matchLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Validate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Raise Dispute Dialog */}
+      <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Raise Dispute</DialogTitle>
+            <DialogDescription>
+              Describe the issue with delivery for PO {disputeDelivery?.poNumber || disputeDelivery?.poId}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description</Label>
+              <textarea
+                value={disputeDescription}
+                onChange={e => setDisputeDescription(e.target.value)}
+                placeholder="Describe the delivery issue in detail..."
+                rows={4}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDisputeDialogOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!disputeDescription.trim() || disputeLoading}
+              onClick={() => disputeDelivery && handleRaiseDispute(
+                disputeDelivery.poId,
+                disputeDelivery.id,
+                'DELIVERY_ISSUE',
+                disputeDescription
+              )}
+            >
+              {disputeLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              Submit Dispute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
+    </RequireRole>
   );
 }

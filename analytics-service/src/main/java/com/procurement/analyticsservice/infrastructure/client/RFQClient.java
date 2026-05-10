@@ -23,9 +23,18 @@ public class RFQClient {
     @Retry(name = "rfqService")
     public Mono<List<Map<String, Object>>> getRFQs() {
         return rfqWebClient.get()
-                .uri("/api/rfqs")
+                .uri("/api/rfqs?page=0&size=1000")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .map(body -> {
+                    Object content = body.get("content");
+                    if (content instanceof List<?> list) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> typed = (List<Map<String, Object>>) list;
+                        return typed;
+                    }
+                    return List.<Map<String, Object>>of();
+                })
                 .doOnError(e -> log.error("Error fetching RFQs: {}", e.getMessage()));
     }
 

@@ -1,7 +1,10 @@
-server:
+﻿server:
   port: 8084
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: procurement-service
   datasource:
@@ -9,7 +12,14 @@ spring:
     username: postgres
     password: secret
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: create-drop
     show-sql: true
@@ -21,6 +31,13 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
+    listener:
+      missing-topics-fatal: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -30,24 +47,23 @@ spring:
   cloud:
     kubernetes:
       discovery:
-        enabled: true
-        all-namespaces: false
+        enabled: false
       loadbalancer:
         mode: service
 
-# Service URLs
 services:
   auth:
-    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
   rfq:
-    url: ${RFQ_SERVICE_URL:http://rfq-bidding-service:8083}
+    url: ${RFQ_SERVICE_URL:http://localhost:8083}
+  vendor:
+    url: ${VENDOR_SERVICE_URL:http://localhost:8082}
 
 approval:
   threshold:
     manager: 10000
     director: 50000
 
-# Resilience4j Circuit Breaker
 resilience4j:
   circuitbreaker:
     configs:
@@ -61,7 +77,13 @@ resilience4j:
         baseConfig: default
       rfqService:
         baseConfig: default
+      vendorService:
+        baseConfig: default
 
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 logging:
   level:
     com.procurement: DEBUG
+
+

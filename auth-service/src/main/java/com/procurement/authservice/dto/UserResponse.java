@@ -19,4 +19,7 @@ public class UserResponse {
     private String roleName;
     private LocalDateTime lastLogin;
     private LocalDateTime registrationDate;
+    // Frontend compatibility fields
+    private Boolean active;
+    private Boolean accountLocked;
 }

@@ -5,11 +5,13 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Download, TrendingUp, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { analyticsApi, poApi, rfqApi, vendorApi } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
+import { getDashboardByRole } from "@/components/require-role";
 import { 
   BarChart, 
   Bar, 
@@ -30,7 +32,7 @@ interface DashboardData {
   totalRFQs: number;
   openRFQs: number;
   totalPOs: number;
-  pendingApprovals: number[];
+  pendingApprovals: number; // backend returns a long, not an array
   vendorCount: number;
 }
 
@@ -119,10 +121,28 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const router = useRouter();
   const { toast } = useToast();
+  const user = useAuthStore((state) => state.user);
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canCreatePO = hasPermission("po:create");
+  const canApprovePO = hasPermission("po:approve");
+  const canRejectPO = hasPermission("po:reject");
+
+  // Redirect role-specific users away from the generic dashboard
+  useEffect(() => {
+    if (!user) return;
+    const role = user.role || user.roleName;
+    if (role === "VENDOR" || role === "AUDITOR") {
+      router.replace(getDashboardByRole(role));
+    }
+  }, [user, router]);
 
   useEffect(() => {
+    // Don't fetch if user is being redirected away
+    if (!user) return;
+    const role = user.role || user.roleName;
+    if (role === "VENDOR" || role === "AUDITOR") return;
     loadDashboardData();
-  }, []);
+  }, [user]);
 
   // Generate activity feed from POs, RFQs and vendors
   function generateActivities(pos: any[], rfqList: any[], vendorList: any[]): Activity[] {
@@ -134,7 +154,7 @@ export default function DashboardPage() {
         id: `po-${po.id}-${idx}`,
         title: `PO ${po.poNumber || po.id} ${po.status?.toLowerCase()}`,
         vendor: po.vendorName || "Unknown Vendor",
-        status: po.status === "APPROVED" ? "approved" : po.status === "DELIVERED" ? "delivered" : "pending",
+        status: po.status?.toLowerCase().includes("approved") && !po.status?.toLowerCase().includes("pending") ? "approved" : po.status?.toLowerCase() === "delivered" ? "delivered" : "pending",
         time: po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "Recently"
       });
     });
@@ -167,17 +187,50 @@ export default function DashboardPage() {
   async function loadDashboardData() {
     try {
       setLoading(true);
+      const role = user?.role || user?.roleName;
+      // VENDOR and AUDITOR are redirected away from this page; skip their API calls
+      const canReadVendors = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
+      const canReadAnalytics = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
+      const canReadPOs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
+      const canReadRFQs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
+
       const [overview, vendorList, poList, rfqList] = await Promise.all([
-        analyticsApi.getDashboard() as Promise<DashboardData>,
-        vendorApi.getAll() as Promise<any[]>,
-        poApi.getAll() as Promise<any[]>,
-        rfqApi.getAll() as Promise<any[]>
-      ]);
-      setDashboardData(overview);
-      setVendors(vendorList);
-      setPurchaseOrders(poList);
-      setRfqs(rfqList);
-      setActivities(generateActivities(poList, rfqList, vendorList));
+        canReadAnalytics ? analyticsApi.getDashboard().catch(() => null) : Promise.resolve(null),
+        canReadVendors ? vendorApi.getAllList().catch(() => []) : Promise.resolve([]),
+        canReadPOs ? poApi.getAllList().catch(() => []) : Promise.resolve([]),
+        canReadRFQs ? rfqApi.getAllList().catch(() => []) : Promise.resolve([]),
+      ]) as [DashboardData | null, any[], any[], any[]];
+
+      // Normalise POs
+      const normalisedPOs = poList.map((po: any) => ({
+        ...po,
+        id: String(po.id || po.poId),
+        poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
+        vendorName: po.vendorName || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+        createdAt: po.createdAt || po.issueDate,
+        deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
+        totalAmount: Number(po.totalAmount) || 0,
+      }));
+
+      // Normalise RFQs
+      const normalisedRFQs = rfqList.map((r: any) => ({
+        ...r,
+        id: String(r.id || r.rfqId),
+        rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
+      }));
+
+      // Normalise vendors
+      const normalisedVendors = vendorList.map((v: any) => ({
+        ...v,
+        id: String(v.id || v.vendorId),
+        verified: v.verified ?? (v.complianceStatus === "Verified"),
+      }));
+
+      if (overview) setDashboardData(overview);
+      setVendors(normalisedVendors);
+      setPurchaseOrders(normalisedPOs);
+      setRfqs(normalisedRFQs);
+      setActivities(generateActivities(normalisedPOs, normalisedRFQs, normalisedVendors));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
@@ -223,8 +276,10 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-500">Overview of procurement activities</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8">Download Report</Button>
-            <Button size="sm" className="text-xs h-8">New Purchase Order</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => router.push('/analytics')}>Download Report</Button>
+            {canCreatePO && (
+            <Button size="sm" className="text-xs h-8" onClick={() => router.push('/procurement')}>New Purchase Order</Button>
+            )}
           </div>
         </div>
 
@@ -262,7 +317,7 @@ export default function DashboardPage() {
           />
           <StatCard
             title="Pending Approvals"
-            value={dashboardData?.pendingApprovals || purchaseOrders.filter(po => po.status === 'PENDING').length}
+            value={dashboardData?.pendingApprovals ?? purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).length}
             loading={loading}
             icon={Package}
             color="amber"
@@ -373,10 +428,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="p-4">
               <div className="space-y-3">
-                {purchaseOrders.filter(po => po.status === "PENDING").length === 0 ? (
+                {purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).length === 0 ? (
                   <p className="text-gray-500 text-xs">No pending approvals.</p>
                 ) : (
-                  purchaseOrders.filter(po => po.status === "PENDING").slice(0, 5).map((po) => (
+                  purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).slice(0, 5).map((po) => (
                     <div key={po.id} className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -388,8 +443,8 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <p className="text-xs font-medium text-gray-900">${po.totalAmount?.toLocaleString() || 0}</p>
                         <div className="flex gap-1 mt-1">
-                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => handleRejectPO(po.id)}>Reject</Button>
-                          <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => handleApprovePO(po.id)}>Approve</Button>
+                          {canRejectPO && <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => handleRejectPO(po.id)}>Reject</Button>}
+                          {canApprovePO && <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => handleApprovePO(po.id)}>Approve</Button>}
                         </div>
                       </div>
                     </div>
@@ -411,22 +466,30 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {canCreatePO && (
               <Button variant="outline" className="justify-start" onClick={() => router.push('/procurement')}>
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 Create Purchase Order
               </Button>
+              )}
+              {hasPermission("vendors:create") && (
               <Button variant="outline" className="justify-start" onClick={() => router.push('/vendors')}>
                 <Users className="mr-2 h-4 w-4" />
                 Add New Vendor
               </Button>
+              )}
+              {hasPermission("inventory:update") && (
               <Button variant="outline" className="justify-start" onClick={() => router.push('/inventory')}>
                 <Package className="mr-2 h-4 w-4" />
                 Update Inventory
               </Button>
+              )}
+              {hasPermission("analytics:read") && (
               <Button variant="outline" className="justify-start" onClick={() => router.push('/analytics')}>
                 <TrendingUp className="mr-2 h-4 w-4" />
                 View Reports
               </Button>
+              )}
             </div>
           </CardContent>
         </Card>

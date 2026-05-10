@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { rfqApi } from "@/lib/api";
+import { rfqApi, requisitionApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
@@ -34,6 +34,8 @@ interface RFQDialogProps {
 export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requisitions, setRequisitions] = useState<any[]>([]);
+  const [selectedReqId, setSelectedReqId] = useState("");
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -43,6 +45,29 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     expectedQuantity: "",
   });
 
+  // Load approved requisitions when dialog opens
+  useEffect(() => {
+    if (!open) return;
+    requisitionApi.getAll(0, 100).then((res) => {
+      const items = (res.content ?? []).filter((r: any) => r.status === "APPROVED");
+      setRequisitions(items);
+    }).catch(() => {});
+  }, [open]);
+
+  // Pre-fill form from selected requisition
+  function handleRequisitionSelect(reqId: string) {
+    setSelectedReqId(reqId);
+    if (!reqId) return;
+    const req = requisitions.find((r: any) => String(r.requisitionId) === reqId);
+    if (!req) return;
+    setFormData((prev) => ({
+      ...prev,
+      title: req.justification || `Requisition ${req.requisitionNumber}`,
+      description: req.justification || "",
+      estimatedValue: String(req.estimatedBudget || ""),
+    }));
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -51,8 +76,8 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
       await rfqApi.create({
         ...formData,
         estimatedValue: parseFloat(formData.estimatedValue) || 0,
-        categoryId: parseInt(formData.categoryId) || null,
-        expectedQuantity: parseInt(formData.expectedQuantity) || null,
+        categoryId: parseInt(formData.categoryId) || undefined,
+        expectedQuantity: parseInt(formData.expectedQuantity) || undefined,
         deadline: new Date(formData.deadline).toISOString(),
       });
       
@@ -71,6 +96,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
         categoryId: "",
         expectedQuantity: "",
       });
+      setSelectedReqId("");
     } catch (error) {
       toast({
         title: "Error",
@@ -93,6 +119,31 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Optional: pre-fill from approved requisition */}
+          {requisitions.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="requisitionId" className="text-xs text-gray-500">
+                Pre-fill from Approved Requisition (optional)
+              </Label>
+              <Select value={selectedReqId} onValueChange={handleRequisitionSelect}>
+                <SelectTrigger id="requisitionId" className="h-8 text-xs">
+                  <SelectValue placeholder="Select a requisition to pre-fill..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— None —</SelectItem>
+                  {requisitions.map((req: any) => (
+                    <SelectItem key={req.requisitionId} value={String(req.requisitionId)}>
+                      {req.requisitionNumber} — {req.department} (${req.estimatedBudget?.toLocaleString()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedReqId && (
+                <p className="text-[10px] text-emerald-600">✓ Form pre-filled from requisition</p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="title">Title *</Label>
             <Input

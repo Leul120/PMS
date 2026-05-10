@@ -7,111 +7,142 @@ import com.procurement.deliveryinvoiceservice.service.DeliveryInvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
-
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class DeliveryInvoiceController {
-    
+
     private final DeliveryInvoiceService service;
-    
+
+    // ── Deliveries ──────────────────────────────────────────────────────────
+
     @PostMapping("/deliveries")
-    public ResponseEntity<Delivery> createDelivery(
-            @RequestParam Long poId,
-            @RequestParam Long vendorId,
-            @RequestParam LocalDate expectedDate,
-            @RequestParam LocalDate actualDate,
-            @RequestParam Integer quantityDelivered,
-            @RequestParam(required = false) String issueNotes,
-            @RequestParam(required = false) String qualityRemarks) {
-        return ResponseEntity.ok(service.createDelivery(poId, vendorId, expectedDate, actualDate, 
-            quantityDelivered, issueNotes, qualityRemarks));
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
+    public ResponseEntity<Delivery> createDelivery(@Valid @RequestBody DeliveryRequest request) {
+        return ResponseEntity.ok(service.createDelivery(
+                request.getPoId(),
+                request.getVendorId(),
+                request.getExpectedDate(),
+                request.getActualDate(),
+                request.getQuantityDelivered(),
+                request.getIssueNotes(),
+                request.getQualityRemarks()));
     }
-    
+
     @GetMapping("/deliveries/po/{poId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<Delivery>> getDeliveriesByPO(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getDeliveriesByPO(poId));
     }
-    
+
     @GetMapping("/deliveries")
-    public ResponseEntity<List<Delivery>> getAllDeliveries() {
-        return ResponseEntity.ok(service.getAllDeliveries());
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
+    public ResponseEntity<PagedResponse<Delivery>> getAllDeliveries(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(service.getAllDeliveries(page, size));
     }
-    
+
+    // ── Invoices ─────────────────────────────────────────────────────────────
+
     @PostMapping("/invoices")
-    public ResponseEntity<Invoice> submitInvoice(
-            @RequestParam Long poId,
-            @RequestParam BigDecimal invoiceAmount,
-            @RequestParam Long vendorId) {
-        return ResponseEntity.ok(service.submitInvoice(poId, invoiceAmount, vendorId));
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
+    public ResponseEntity<Invoice> submitInvoice(@Valid @RequestBody InvoiceRequest request) {
+        return ResponseEntity.ok(service.submitInvoice(
+                request.getPoId(),
+                request.getInvoiceAmount(),
+                request.getVendorId()));
     }
-    
+
     @GetMapping("/invoices/po/{poId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<Invoice>> getInvoicesByPO(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getInvoicesByPO(poId));
     }
-    
+
     @GetMapping("/invoices")
-    public ResponseEntity<List<Invoice>> getAllInvoices() {
-        return ResponseEntity.ok(service.getAllInvoices());
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
+    public ResponseEntity<PagedResponse<Invoice>> getAllInvoices(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(service.getAllInvoices(page, size));
     }
-    
+
     @PostMapping("/invoices/{invoiceId}/validate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<Invoice> validateInvoice(
             @PathVariable Long invoiceId,
             @RequestParam BigDecimal expectedAmount,
             @RequestParam Integer expectedQuantity) {
         return ResponseEntity.ok(service.validateInvoice(invoiceId, expectedAmount, expectedQuantity));
     }
-    
+
     @PostMapping("/invoices/{invoiceId}/dispute")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<Invoice> disputeInvoice(
             @PathVariable Long invoiceId,
             @RequestParam String reason) {
         return ResponseEntity.ok(service.disputeInvoice(invoiceId, reason));
     }
-    
-    // 3-Way Match Endpoints
+
+    // ── 3-Way Match ──────────────────────────────────────────────────────────
+
     @PostMapping("/threewaymatch/validate")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<ThreeWayMatchResponse> performThreeWayMatch(
-            @RequestParam Long poId,
-            @RequestParam Long deliveryId,
-            @RequestParam Long invoiceId,
-            @RequestParam BigDecimal poAmount,
-            @RequestParam Integer poQuantity) {
-        return ResponseEntity.ok(service.performThreeWayMatch(poId, deliveryId, invoiceId, poAmount, poQuantity));
+            @Valid @RequestBody ThreeWayMatchRequest request) {
+        return ResponseEntity.ok(service.performThreeWayMatch(
+                request.getPoId(),
+                request.getDeliveryId(),
+                request.getInvoiceId(),
+                request.getPoAmount(),
+                request.getPoQuantity()));
     }
-    
+
     @GetMapping("/threewaymatch/po/{poId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<ThreeWayMatchResponse> getThreeWayMatch(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getThreeWayMatch(poId));
     }
-    
-    // Dispute Management Endpoints
+
+    // ── Disputes ─────────────────────────────────────────────────────────────
+
     @PostMapping("/disputes")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<DisputeResponse> raiseDispute(
             @Valid @RequestBody DisputeRequest request,
             @RequestHeader("X-User-Id") Long userId,
-            @RequestHeader("X-User-Role") String userRole) {
+            @RequestHeader(value = "X-User-Role", required = false, defaultValue = "OFFICER") String userRole) {
         return ResponseEntity.ok(service.raiseDispute(request, userId, userRole));
     }
-    
+
     @GetMapping("/disputes")
-    public ResponseEntity<List<DisputeResponse>> getAllDisputes() {
-        return ResponseEntity.ok(service.getAllDisputes());
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
+    public ResponseEntity<PagedResponse<DisputeResponse>> getAllDisputes(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(service.getAllDisputes(page, size));
     }
-    
+
+    @GetMapping("/disputes/{disputeId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
+    public ResponseEntity<DisputeResponse> getDispute(@PathVariable Long disputeId) {
+        return ResponseEntity.ok(service.getDisputeById(disputeId));
+    }
+
     @GetMapping("/disputes/status/{status}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<List<DisputeResponse>> getDisputesByStatus(@PathVariable String status) {
         return ResponseEntity.ok(service.getDisputesByStatus(status));
     }
-    
+
     @PostMapping("/disputes/{disputeId}/resolve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER')")
     public ResponseEntity<DisputeResponse> resolveDispute(
             @PathVariable Long disputeId,
             @Valid @RequestBody ResolutionRequest request,

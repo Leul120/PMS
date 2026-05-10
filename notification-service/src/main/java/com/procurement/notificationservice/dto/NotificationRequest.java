@@ -19,6 +19,6 @@ public class NotificationRequest {
     private String message;
     
     private String category; // BID_DEADLINE, APPROVAL_PENDING, etc.
-    
-    private Long relatedEntityId;
+
+    private String relatedEntityId;
 }

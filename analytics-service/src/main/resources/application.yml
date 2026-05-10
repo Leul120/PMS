@@ -1,38 +1,38 @@
-server:
+﻿server:
   port: 8087
+
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: analytics-service
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: analytics-service-group
-
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       timeout: 2000
       database: 0
-
   cloud:
     kubernetes:
       discovery:
-        enabled: true
-        all-namespaces: false
+        enabled: false
       loadbalancer:
         mode: service
 
-# Service URLs - Kubernetes DNS names with fallback to env vars
 services:
   vendor:
-    url: ${VENDOR_SERVICE_URL:http://vendor-service:8082}
+    url: ${VENDOR_SERVICE_URL:http://localhost:8082}
   procurement:
-    url: ${PROCUREMENT_SERVICE_URL:http://procurement-service:8084}
+    url: ${PROCUREMENT_SERVICE_URL:http://localhost:8084}
   rfq:
-    url: ${RFQ_SERVICE_URL:http://rfq-bidding-service:8083}
+    url: ${RFQ_SERVICE_URL:http://localhost:8083}
 
-# Resilience4j Circuit Breaker Configuration
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
+
 resilience4j:
   circuitbreaker:
     configs:
@@ -48,3 +48,5 @@ resilience4j:
         baseConfig: default
       rfqService:
         baseConfig: default
+
+

@@ -46,7 +46,7 @@ spring:
         - id: analytics-service
           uri: ${ANALYTICS_SERVICE_URL:http://localhost:8087}
           predicates:
-            - Path=/api/reports/**,/api/dashboard/**
+            - Path=/api/reports/**,/api/dashboard/**,/api/analytics/**
           filters:
             - StripPrefix=0
         - id: inventory-service
@@ -61,12 +61,27 @@ spring:
             - Path=/api/notifications/**
           filters:
             - StripPrefix=0
+        - id: delivery-invoice-service-extra
+          uri: ${DELIVERY_INVOICE_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/threewaymatch/**,/api/disputes/**
+          filters:
+            - StripPrefix=0
+        - id: auth-admin-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - StripPrefix=0
       globalcors:
         cors-configurations:
           '[/**]':
             allowedOriginPatterns: "http://localhost:*"
             allowedMethods: "*"
             allowedHeaders: "*"
+
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 
 logging:
   level:

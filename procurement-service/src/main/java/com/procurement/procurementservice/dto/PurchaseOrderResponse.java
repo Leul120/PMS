@@ -14,13 +14,21 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class PurchaseOrderResponse {
     private Long poId;
+    // Alias for frontend compatibility
+    private Long id;
+    private String poNumber;
     private Long rfqId;
     private Long vendorId;
+    private String vendorName;
     private BigDecimal totalAmount;
     private Long managerId;
     private String status;
     private LocalDate issueDate;
+    // Alias for frontend compatibility
+    private LocalDate createdAt;
     private LocalDate expectedDeliveryDate;
+    // Alias for frontend compatibility
+    private LocalDate deliveryDate;
     private Long approvedBy;
     private LocalDate approvalDate;
 }

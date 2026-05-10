@@ -8,8 +8,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.security.PublicKey;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,39 +35,17 @@ public class PublicKeyController {
      */
     @GetMapping("/jwks.json")
     public ResponseEntity<Map<String, Object>> getJwks() {
-        PublicKey publicKey = jwtTokenProvider.getPublicKey();
-        String publicKeyBase64 = Base64.getEncoder().encodeToString(publicKey.getEncoded());
-        
-        Map<String, Object> key = new HashMap<>();
-        key.put("kty", "RSA");
-        key.put("use", "sig");
-        key.put("alg", "RS256");
-        key.put("kid", "procurement-key-1");
-        key.put("n", publicKeyBase64);
-        key.put("e", "AQAB"); // Standard RSA exponent
-        
+        // Using HS256 symmetric keys — JWKS not applicable
         Map<String, Object> response = new HashMap<>();
-        response.put("keys", new Object[]{key});
-        
-        log.debug("Public key requested by another service");
+        response.put("keys", new Object[]{});
         return ResponseEntity.ok(response);
     }
-    
-    /**
-     * Simple endpoint to get raw public key PEM format.
-     * Useful for services that want to configure the key directly.
-     */
+
     @GetMapping("/public-key")
     public ResponseEntity<Map<String, String>> getPublicKey() {
-        PublicKey publicKey = jwtTokenProvider.getPublicKey();
-        String publicKeyBase64 = Base64.getEncoder().encodeToString(publicKey.getEncoded());
-        
         Map<String, String> response = new HashMap<>();
-        response.put("algorithm", "RS256");
-        response.put("format", "X.509");
-        response.put("key", publicKeyBase64);
-        response.put("type", "RSA");
-        
+        response.put("algorithm", "HS256");
+        response.put("note", "Symmetric key — not publicly shareable");
         return ResponseEntity.ok(response);
     }
     

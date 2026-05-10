@@ -5,7 +5,7 @@
     <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>3.2.0</version><relativePath/></parent>
     <groupId>com.procurement</groupId><artifactId>api-gateway</artifactId><version>1.0.0</version>
     <packaging>jar</packaging>
-    <properties><java.version>17</java.version><spring-cloud.version>2023.0.0</spring-cloud.version></properties>
+    <properties><java.version>21</java.version><spring-cloud.version>2023.0.0</spring-cloud.version></properties>
     <dependencies>
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-gateway</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis-reactive</artifactId></dependency>
@@ -20,6 +20,11 @@
         <dependency><groupId>org.springframework.cloud</groupId><artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId></dependency>
         <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-micrometer</artifactId></dependency>
         <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-retry</artifactId></dependency>
+
+        <!-- JWT for token validation -->
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-api</artifactId><version>0.12.3</version></dependency>
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-impl</artifactId><version>0.12.3</version><scope>runtime</scope></dependency>
+        <dependency><groupId>io.jsonwebtoken</groupId><artifactId>jjwt-jackson</artifactId><version>0.12.3</version><scope>runtime</scope></dependency>
 
         <!-- Redis for distributed caching and rate limiting -->
         <dependency>

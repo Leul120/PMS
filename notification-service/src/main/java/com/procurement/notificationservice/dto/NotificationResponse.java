@@ -19,7 +19,7 @@ public class NotificationResponse {
     private String message;
     private String status;
     private String category;
-    private Long relatedEntityId;
+    private String relatedEntityId;
     private LocalDateTime createdAt;
     private LocalDateTime sentAt;
     private LocalDateTime readAt;

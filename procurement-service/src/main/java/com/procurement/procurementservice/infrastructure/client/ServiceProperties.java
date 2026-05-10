@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 public class ServiceProperties {
     private ServiceConfig auth;
     private ServiceConfig rfq;
+    private ServiceConfig vendor;
 
     @Data
     public static class ServiceConfig {

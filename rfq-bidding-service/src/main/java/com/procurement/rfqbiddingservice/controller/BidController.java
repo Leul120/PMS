@@ -46,4 +46,10 @@ public class BidController {
     public ResponseEntity<BidResponse> evaluateBid(@PathVariable Long bidId) {
         return ResponseEntity.ok(rfqService.evaluateBid(bidId));
     }
+
+    @PostMapping("/{bidId}/award")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
+    public ResponseEntity<BidResponse> awardBid(@PathVariable Long bidId) {
+        return ResponseEntity.ok(rfqService.awardBid(bidId));
+    }
 }

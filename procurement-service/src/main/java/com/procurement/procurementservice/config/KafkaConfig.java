@@ -15,4 +15,12 @@ public class KafkaConfig {
             .replicas(1)
             .build();
     }
+
+    @Bean
+    public NewTopic approvalPendingTopic() {
+        return TopicBuilder.name("approval.pending")
+            .partitions(3)
+            .replicas(1)
+            .build();
+    }
 }

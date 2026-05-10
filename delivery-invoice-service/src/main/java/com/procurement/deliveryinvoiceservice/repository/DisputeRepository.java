@@ -1,6 +1,8 @@
 package com.procurement.deliveryinvoiceservice.repository;
 
 import com.procurement.deliveryinvoiceservice.entity.Dispute;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -11,4 +13,5 @@ public interface DisputeRepository extends JpaRepository<Dispute, Long> {
     List<Dispute> findByStatus(String status);
     List<Dispute> findByPoId(Long poId);
     List<Dispute> findByRaisedBy(Long raisedBy);
+    Page<Dispute> findAll(Pageable pageable);
 }

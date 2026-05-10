@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authApi } from "@/lib/api";
+import { adminApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import {
@@ -39,7 +39,7 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
     setIsSubmitting(true);
 
     try {
-      await authApi.register({
+      await adminApi.createUser({
         fullName: `${formData.firstName} ${formData.lastName}`,
         email: formData.email,
         password: formData.password,

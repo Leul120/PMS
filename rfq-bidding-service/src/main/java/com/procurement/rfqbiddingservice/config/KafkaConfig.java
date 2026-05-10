@@ -23,4 +23,12 @@ public class KafkaConfig {
             .replicas(1)
             .build();
     }
+
+    @Bean
+    public NewTopic bidDeadlineApproachingTopic() {
+        return TopicBuilder.name("bid.deadline.approaching")
+            .partitions(3)
+            .replicas(1)
+            .build();
+    }
 }

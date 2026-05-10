@@ -13,6 +13,9 @@ import com.procurement.deliveryinvoiceservice.repository.InvoiceRepository;
 import com.procurement.deliveryinvoiceservice.repository.ThreeWayMatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,8 +81,12 @@ public class DeliveryInvoiceService {
         return deliveryRepository.findByPoId(poId);
     }
     
-    public List<Delivery> getAllDeliveries() {
-        return deliveryRepository.findAll();
+    public PagedResponse<Delivery> getAllDeliveries(int page, int size) {
+        Page<Delivery> p = deliveryRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        return PagedResponse.<Delivery>builder()
+            .content(p.getContent()).page(p.getNumber()).size(p.getSize())
+            .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
     
     @Transactional
@@ -169,8 +176,12 @@ public class DeliveryInvoiceService {
         return invoiceRepository.findByPoId(poId);
     }
     
-    public List<Invoice> getAllInvoices() {
-        return invoiceRepository.findAll();
+    public PagedResponse<Invoice> getAllInvoices(int page, int size) {
+        Page<Invoice> p = invoiceRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        return PagedResponse.<Invoice>builder()
+            .content(p.getContent()).page(p.getNumber()).size(p.getSize())
+            .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
     
     @Transactional
@@ -255,16 +266,25 @@ public class DeliveryInvoiceService {
         return mapToDisputeResponse(resolvedDispute);
     }
     
-    public List<DisputeResponse> getAllDisputes() {
-        return disputeRepository.findAll().stream()
-            .map(this::mapToDisputeResponse)
-            .collect(Collectors.toList());
+    public PagedResponse<DisputeResponse> getAllDisputes(int page, int size) {
+        Page<Dispute> p = disputeRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        return PagedResponse.<DisputeResponse>builder()
+            .content(p.getContent().stream().map(this::mapToDisputeResponse).collect(Collectors.toList()))
+            .page(p.getNumber()).size(p.getSize())
+            .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
     
     public List<DisputeResponse> getDisputesByStatus(String status) {
         return disputeRepository.findByStatus(status).stream()
             .map(this::mapToDisputeResponse)
             .collect(Collectors.toList());
+    }
+
+    public DisputeResponse getDisputeById(Long disputeId) {
+        Dispute dispute = disputeRepository.findById(disputeId)
+            .orElseThrow(() -> new RuntimeException("Dispute not found: " + disputeId));
+        return mapToDisputeResponse(dispute);
     }
     
     private ThreeWayMatchResponse mapToThreeWayMatchResponse(ThreeWayMatch match) {
@@ -303,3 +323,4 @@ public class DeliveryInvoiceService {
             .build();
     }
 }
+

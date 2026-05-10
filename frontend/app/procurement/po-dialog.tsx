@@ -1,69 +1,87 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { poApi, vendorApi } from "@/lib/api";
+import { poApi, rfqApi, vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-
-interface Vendor {
-  id: string;
-  companyName: string;
-  email: string;
-}
 
 interface PODialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** Pass an existing PO to edit it instead of creating a new one */
+  initialData?: {
+    id: string | number;
+    vendorId?: string | number;
+    totalAmount?: number;
+    deliveryDate?: string;
+  } | null;
 }
 
-export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
+const EMPTY_FORM = {
+  rfqId: "",
+  vendorId: "",
+  totalAmount: "",
+  expectedDeliveryDate: "",
+  bidId: "",
+};
+
+export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loadingVendors, setLoadingVendors] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    vendorId: "",
-    totalAmount: "",
-    deliveryDate: "",
-  });
+  const [rfqs, setRfqs] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
-  // Load vendors when dialog opens
+  const isEditing = !!initialData?.id;
+
   useEffect(() => {
-    if (open) {
-      loadVendors();
+    if (!open) return;
+    if (initialData) {
+      setFormData({
+        rfqId: "",
+        vendorId: String(initialData.vendorId || ""),
+        totalAmount: String(initialData.totalAmount || ""),
+        expectedDeliveryDate: initialData.deliveryDate
+          ? new Date(initialData.deliveryDate).toISOString().split("T")[0]
+          : "",
+        bidId: "",
+      });
+    } else {
+      setFormData(EMPTY_FORM);
     }
+    loadDropdownData();
   }, [open]);
 
-  async function loadVendors() {
+  async function loadDropdownData() {
     try {
-      setLoadingVendors(true);
-      const data = await vendorApi.getAll();
-      // Filter for verified/active vendors
-      const activeVendors = data.filter((v: any) => v.status === 'VERIFIED' || v.status === 'ACTIVE');
-      setVendors(activeVendors);
-    } catch (err) {
-      toast({
-        title: "Warning",
-        description: "Could not load vendors. You can still enter the vendor ID manually.",
-        variant: "destructive",
-      });
+      setLoadingData(true);
+      const [rfqData, vendorData] = await Promise.all([
+        rfqApi.getAllList().catch(() => []),
+        vendorApi.getAllList().catch(() => []),
+      ]);
+      // Only show open RFQs for new POs
+      setRfqs(rfqData.filter((r: any) => r.status?.toUpperCase() === "OPEN"));
+      // Only show active/verified vendors
+      setVendors(vendorData.filter((v: any) =>
+        v.status === "ACTIVE" || v.verified === true || v.complianceStatus === "Verified"
+      ));
+    } catch {
+      // silently fall back — user can type IDs manually
     } finally {
-      setLoadingVendors(false);
+      setLoadingData(false);
     }
   }
 
@@ -72,31 +90,36 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
     setIsSubmitting(true);
 
     try {
-      await poApi.create({
-        ...formData,
-        vendorId: parseInt(formData.vendorId),
-        totalAmount: parseFloat(formData.totalAmount) || 0,
-        deliveryDate: formData.deliveryDate ? new Date(formData.deliveryDate).toISOString() : null,
-      });
-      
-      toast({
-        title: "Purchase Order created",
-        description: "The purchase order has been created successfully.",
-      });
-      
+      if (isEditing) {
+        await poApi.update(initialData!.id, {
+          vendorId: formData.vendorId ? parseInt(formData.vendorId) : undefined,
+          totalAmount: formData.totalAmount ? parseFloat(formData.totalAmount) : undefined,
+          expectedDeliveryDate: formData.expectedDeliveryDate || undefined,
+        });
+        toast({ title: "Purchase Order updated", description: "The purchase order has been updated." });
+      } else {
+        if (!formData.rfqId || !formData.vendorId || !formData.totalAmount) {
+          toast({ title: "Validation error", description: "RFQ, Vendor and Amount are required.", variant: "destructive" });
+          setIsSubmitting(false);
+          return;
+        }
+        await poApi.create({
+          rfqId: parseInt(formData.rfqId),
+          vendorId: parseInt(formData.vendorId),
+          totalAmount: parseFloat(formData.totalAmount),
+          expectedDeliveryDate: formData.expectedDeliveryDate || undefined,
+          bidId: formData.bidId ? parseInt(formData.bidId) : undefined,
+        });
+        toast({ title: "Purchase Order created", description: "The purchase order has been created successfully." });
+      }
+
       onSuccess();
       onOpenChange(false);
-      setFormData({
-        title: "",
-        description: "",
-        vendorId: "",
-        totalAmount: "",
-        deliveryDate: "",
-      });
+      setFormData(EMPTY_FORM);
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create purchase order",
+        description: error instanceof Error ? error.message : `Failed to ${isEditing ? "update" : "create"} purchase order`,
         variant: "destructive",
       });
     } finally {
@@ -106,36 +129,49 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Create Purchase Order</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
           <DialogDescription>
-            Create a new purchase order for a vendor.
+            {isEditing
+              ? "Update the details of this purchase order."
+              : "Create a new purchase order linked to an RFQ and vendor."}
           </DialogDescription>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title/Description *</Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="Enter PO title or description"
-              required
-            />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Additional Details</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Additional order details"
-              rows={2}
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!isEditing && (
+            <div className="space-y-2">
+              <Label htmlFor="rfqId">RFQ *</Label>
+              {rfqs.length > 0 ? (
+                <Select
+                  value={formData.rfqId}
+                  onValueChange={(v) => setFormData({ ...formData, rfqId: v })}
+                >
+                  <SelectTrigger id="rfqId">
+                    <SelectValue placeholder={loadingData ? "Loading..." : "Select an open RFQ"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rfqs.map((rfq: any) => (
+                      <SelectItem key={rfq.rfqId || rfq.id} value={String(rfq.rfqId || rfq.id)}>
+                        {rfq.rfqNumber || `RFQ-${rfq.rfqId || rfq.id}`} — {rfq.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="rfqId"
+                  type="number"
+                  value={formData.rfqId}
+                  onChange={(e) => setFormData({ ...formData, rfqId: e.target.value })}
+                  placeholder={loadingData ? "Loading..." : "Enter RFQ ID"}
+                  required
+                  disabled={loadingData}
+                />
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -143,15 +179,15 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
               {vendors.length > 0 ? (
                 <Select
                   value={formData.vendorId}
-                  onValueChange={(value) => setFormData({ ...formData, vendorId: value })}
+                  onValueChange={(v) => setFormData({ ...formData, vendorId: v })}
                 >
                   <SelectTrigger id="vendorId">
-                    <SelectValue placeholder={loadingVendors ? "Loading..." : "Select a vendor"} />
+                    <SelectValue placeholder={loadingData ? "Loading..." : "Select a vendor"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {vendors.map((vendor) => (
-                      <SelectItem key={vendor.id} value={vendor.id}>
-                        {vendor.companyName}
+                    {vendors.map((v: any) => (
+                      <SelectItem key={v.vendorId || v.id} value={String(v.vendorId || v.id)}>
+                        {v.companyName}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -162,34 +198,49 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
                   type="number"
                   value={formData.vendorId}
                   onChange={(e) => setFormData({ ...formData, vendorId: e.target.value })}
-                  placeholder={loadingVendors ? "Loading..." : "Enter vendor ID"}
-                  required
-                  disabled={loadingVendors}
+                  placeholder={loadingData ? "Loading..." : "Enter vendor ID"}
+                  required={!isEditing}
+                  disabled={loadingData}
                 />
               )}
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="totalAmount">Total Amount ($) *</Label>
               <Input
                 id="totalAmount"
                 type="number"
+                step="0.01"
                 value={formData.totalAmount}
                 onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
                 placeholder="0.00"
-                required
+                required={!isEditing}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="deliveryDate">Expected Delivery Date</Label>
+            <Label htmlFor="expectedDeliveryDate">Expected Delivery Date</Label>
             <Input
-              id="deliveryDate"
+              id="expectedDeliveryDate"
               type="date"
-              value={formData.deliveryDate}
-              onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
+              value={formData.expectedDeliveryDate}
+              onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
             />
           </div>
+
+          {!isEditing && (
+            <div className="space-y-2">
+              <Label htmlFor="bidId">Linked Bid ID (optional)</Label>
+              <Input
+                id="bidId"
+                type="number"
+                value={formData.bidId}
+                onChange={(e) => setFormData({ ...formData, bidId: e.target.value })}
+                placeholder="Leave blank if not from a bid"
+              />
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -197,7 +248,7 @@ export function PODialog({ open, onOpenChange, onSuccess }: PODialogProps) {
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Purchase Order
+              {isEditing ? "Save Changes" : "Create Purchase Order"}
             </Button>
           </DialogFooter>
         </form>

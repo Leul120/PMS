@@ -24,11 +24,13 @@ import {
 } from "recharts";
 import { Download, TrendingUp, DollarSign, Users, ShoppingCart } from "lucide-react";
 import { poApi, vendorApi } from "@/lib/api";
+import { RequireRole } from "@/components/require-role";
+import { useAuthStore } from "@/lib/auth-store";
 
 // Helper functions to generate chart data from API responses
 function generateMonthlySpendData(pos: any[]) {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const monthlyData = months.map(month => ({ month, value: 0, budget: 50000 }));
+  const monthlyData = months.map(month => ({ month, value: 0 }));
   
   pos.forEach((po) => {
     if (po.createdAt) {
@@ -98,15 +100,21 @@ export default function AnalyticsPage() {
   const [vendorData, setVendorData] = useState<any[]>([]);
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasRole = useAuthStore((state) => state.hasRole);
 
   useEffect(() => {
+    // Only fetch if user has access -- avoids 400/403 errors for unauthorized roles
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) {
+      setLoading(false);
+      return;
+    }
     async function loadStats() {
       try {
         const [pos, vendors] = await Promise.all([
-          poApi.getAll() as Promise<any[]>,
-          vendorApi.getAll() as Promise<any[]>,
+          poApi.getAllList().catch(() => []),
+          vendorApi.getAllList().catch(() => []),
         ]);
-        const totalSpend = pos.reduce((sum, po) => sum + (po.totalAmount || 0), 0);
+        const totalSpend = pos.reduce((sum: number, po: any) => sum + (po.totalAmount || 0), 0);
         
         // Calculate YoY growth (compare last 6 months to same period previous year)
         const now = new Date();
@@ -148,7 +156,7 @@ export default function AnalyticsPage() {
       }
     }
     loadStats();
-  }, []);
+  }, [hasRole]);
 
   const formatCurrency = (val: number) =>
     val >= 1000000
@@ -157,7 +165,34 @@ export default function AnalyticsPage() {
       ? `$${(val / 1000).toFixed(0)}K`
       : `$${val}`;
 
+  function handleExport() {
+    const rows: string[][] = [
+      ["Metric", "Value"],
+      ["Total Spend YTD", "$" + stats.totalSpend.toLocaleString()],
+      ["YoY Growth", stats.yoyGrowth + "%"],
+      ["Total Orders", String(stats.totalOrders)],
+      ["Active Vendors", String(stats.activeVendors)],
+      [],
+      ["Month", "Actual Spend"],
+      ...spendData.map((d: any) => [String(d.month), String(d.value)]),
+      [],
+      ["Vendor", "Spend %"],
+      ...vendorData.map((d: any) => [String(d.name), d.value + "%"]),
+      [],
+      ["Category", "Spend", "Orders"],
+      ...categoryData.map((d: any) => [String(d.name), "$" + (d.spend ?? 0).toLocaleString(), String(d.orders)]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "analytics-" + new Date().toISOString().split("T")[0] + ".csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -166,7 +201,7 @@ export default function AnalyticsPage() {
             <p className="text-xs text-gray-500 mt-0.5">Procurement insights</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8">
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
               <Download className="mr-1.5 h-3.5 w-3.5" />
               Export
             </Button>
@@ -212,7 +247,7 @@ export default function AnalyticsPage() {
           <TabsContent value="spend" className="space-y-3">
             <Card className="border-0 shadow-sm">
               <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700">Monthly Spend vs Budget</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-700">Monthly Spend</CardTitle>
               </CardHeader>
               <CardContent className="p-4">
                 <ResponsiveContainer width="100%" height={280}>
@@ -229,14 +264,6 @@ export default function AnalyticsPage() {
                       stroke="#1a73e8" 
                       fill="#1a73e8" 
                       fillOpacity={0.2}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="budget" 
-                      name="Budget" 
-                      stroke="#34a853" 
-                      fill="#34a853" 
-                      fillOpacity={0.1}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -333,5 +360,6 @@ export default function AnalyticsPage() {
         </Tabs>
       </div>
     </DashboardLayout>
+    </RequireRole>
   );
 }

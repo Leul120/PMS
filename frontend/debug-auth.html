@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Debug</title>
+</head>
+<body>
+    <h1>Authentication Debug</h1>
+    <div id="auth-info"></div>
+    
+    <script>
+        function checkAuth() {
+            const stored = localStorage.getItem('auth-storage');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const state = parsed.state;
+                
+                document.getElementById('auth-info').innerHTML = `
+                    <h2>Auth State:</h2>
+                    <p><strong>User:</strong> ${JSON.stringify(state.user, null, 2)}</p>
+                    <p><strong>Token:</strong> ${state.token ? 'Present' : 'Missing'}</p>
+                    <p><strong>Is Authenticated:</strong> ${state.isAuthenticated}</p>
+                    <p><strong>User Role:</strong> ${state.user?.role || state.user?.roleName || 'Not found'}</p>
+                `;
+            } else {
+                document.getElementById('auth-info').innerHTML = '<p>No auth data found in localStorage</p>';
+            }
+        }
+        
+        checkAuth();
+        
+        // Test login with correct credentials
+        async function testLogin() {
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@procurement.com',
+                        password: 'admin123'
+                    })
+                });
+                
+                const result = await response.json();
+                console.log('Login result:', result);
+                
+                if (result.accessToken) {
+                    // Update auth store
+                    const authStore = {
+                        state: {
+                            user: {
+                                id: '1',
+                                userId: '1',
+                                email: 'admin@procurement.com',
+                                fullName: 'System Administrator',
+                                role: 'ADMIN',
+                                roleName: 'ADMIN',
+                                active: true
+                            },
+                            token: result.accessToken,
+                            isAuthenticated: true
+                        }
+                    };
+                    
+                    localStorage.setItem('auth-storage', JSON.stringify(authStore));
+                    alert('Login successful! Refreshing page...');
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+                alert('Login failed: ' + error.message);
+            }
+        }
+    </script>
+    
+    <button onclick="testLogin()">Test Login with Admin Credentials</button>
+    <button onclick="localStorage.removeItem('auth-storage'); location.reload()">Clear Auth</button>
+</body>
+</html>

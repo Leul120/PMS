@@ -1,30 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
-
-// Common vendor categories
-const VENDOR_CATEGORIES = [
-  { id: 1, name: "Technology" },
-  { id: 2, name: "Office Supplies" },
-  { id: 3, name: "Professional Services" },
-  { id: 4, name: "Construction & Maintenance" },
-  { id: 5, name: "Manufacturing" },
-  { id: 6, name: "Marketing & Creative" },
-  { id: 7, name: "Logistics & Transportation" },
-  { id: 8, name: "Facilities Management" },
-  { id: 9, name: "Healthcare" },
-  { id: 10, name: "Financial Services" },
-  { id: 11, name: "Consulting" },
-  { id: 12, name: "Other" },
-];
 
 interface VendorDialogProps {
   open: boolean;
@@ -32,27 +21,52 @@ interface VendorDialogProps {
   onSuccess: () => void;
 }
 
+const EMPTY_FORM = {
+  companyName: "",
+  contactPerson: "",
+  email: "",
+  phoneNumber: "",
+  address: "",
+  taxId: "",
+  categoryId: "",
+};
+
 export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    companyName: "",
-    contactPerson: "",
-    email: "",
-    phoneNumber: "",
-    address: "",
-    taxId: "",
-    categoryId: "",
-  });
-
+  const [categories, setCategories] = useState<{ categoryId: number; categoryName: string }[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (open) {
+      loadCategories();
+      setFormData(EMPTY_FORM);
+      setErrors({});
+    }
+  }, [open]);
+
+  async function loadCategories() {
+    try {
+      setLoadingCategories(true);
+      const data = await vendorApi.getCategories();
+      setCategories(data as any[]);
+    } catch {
+      // fall back to empty list — user can type ID manually
+    } finally {
+      setLoadingCategories(false);
+    }
+  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.companyName.trim()) newErrors.companyName = "Company name is required";
     if (!formData.email.trim()) newErrors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email format";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      newErrors.email = "Invalid email format";
     if (!formData.contactPerson.trim()) newErrors.contactPerson = "Contact person is required";
+    if (!formData.categoryId) newErrors.categoryId = "Category is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -64,26 +78,21 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
 
     try {
       await vendorApi.register({
-        ...formData,
-        categoryId: parseInt(formData.categoryId) || 1,
+        companyName: formData.companyName,
+        contactPerson: formData.contactPerson,
+        email: formData.email,
+        categoryId: parseInt(formData.categoryId),
+        phoneNumber: formData.phoneNumber || undefined,
+        address: formData.address || undefined,
+        taxId: formData.taxId || undefined,
       });
-      
+
       toast({
         title: "Vendor created",
         description: `${formData.companyName} has been added successfully.`,
       });
-      
       onSuccess();
       onOpenChange(false);
-      setFormData({
-        companyName: "",
-        contactPerson: "",
-        email: "",
-        phoneNumber: "",
-        address: "",
-        taxId: "",
-        categoryId: "",
-      });
     } catch (error) {
       toast({
         title: "Error",
@@ -100,11 +109,9 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Add New Vendor</DialogTitle>
-          <DialogDescription>
-            Register a new vendor to your supplier network.
-          </DialogDescription>
+          <DialogDescription>Register a new vendor to your supplier network.</DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="companyName">Company Name *</Label>
@@ -185,21 +192,36 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             </div>
             <div className="space-y-2">
               <Label htmlFor="categoryId">Category *</Label>
-              <Select
-                value={formData.categoryId}
-                onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
-              >
-                <SelectTrigger id="categoryId">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VENDOR_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id.toString()}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {categories.length > 0 ? (
+                <Select
+                  value={formData.categoryId}
+                  onValueChange={(v) => {
+                    setFormData({ ...formData, categoryId: v });
+                    if (errors.categoryId) setErrors({ ...errors, categoryId: "" });
+                  }}
+                >
+                  <SelectTrigger id="categoryId" className={errors.categoryId ? "border-red-500" : ""}>
+                    <SelectValue placeholder={loadingCategories ? "Loading..." : "Select category"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.categoryId} value={String(cat.categoryId)}>
+                        {cat.categoryName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="categoryId"
+                  type="number"
+                  value={formData.categoryId}
+                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  placeholder={loadingCategories ? "Loading..." : "Category ID"}
+                  disabled={loadingCategories}
+                />
+              )}
+              {errors.categoryId && <p className="text-xs text-red-500">{errors.categoryId}</p>}
             </div>
           </div>
 

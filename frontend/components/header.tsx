@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Search, User, Settings, LogOut } from "lucide-react";
-import { motion } from "framer-motion";
+import { Bell, Search, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,30 +18,44 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/lib/auth-store";
 import { notificationApi } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 export function Header() {
   const { user, logout } = useAuthStore();
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const router = useRouter();
 
-  // Fetch unread notification count
+  // Fetch unread notification count — only poll when tab is visible and user is authenticated
   useEffect(() => {
     const userId = user?.userId || user?.id;
-    if (!userId) return;
+    // Guard: only poll if we have a valid numeric-looking userId
+    if (!userId || String(userId).trim() === '' || String(userId) === 'undefined' || String(userId) === 'null') return;
 
     const fetchUnreadCount = async () => {
+      // Skip fetch if tab is hidden to avoid unnecessary requests
+      if (document.visibilityState === "hidden") return;
       try {
         const notifications = await notificationApi.getUnread(userId);
-        setUnreadCount(notifications.length);
-      } catch (err) {
-        console.error("Failed to fetch notifications:", err);
+        setUnreadCount(Array.isArray(notifications) ? notifications.length : 0);
+      } catch {
+        // silently ignore — badge just won't update
       }
     };
 
     fetchUnreadCount();
-    // Poll every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
-    return () => clearInterval(interval);
+
+    // Pause polling when tab is hidden, resume when visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchUnreadCount();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [user?.userId, user?.id]);
 
   return (
@@ -56,24 +69,49 @@ export function Header() {
             placeholder="Search vendors, orders, RFQs..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                const q = searchQuery.trim().toLowerCase();
+                // Route to the most relevant page based on keywords
+                if (q.includes("vendor") || q.includes("supplier")) {
+                  router.push(`/vendors`);
+                } else if (q.includes("rfq") || q.includes("bid") || q.includes("quotation")) {
+                  router.push(`/rfq`);
+                } else if (q.includes("po") || q.includes("order") || q.includes("purchase")) {
+                  router.push(`/orders`);
+                } else if (q.includes("delivery") || q.includes("shipment")) {
+                  router.push(`/deliveries`);
+                } else if (q.includes("inventory") || q.includes("stock")) {
+                  router.push(`/inventory`);
+                } else if (q.includes("invoice") || q.includes("payment")) {
+                  router.push(`/deliveries`);
+                } else if (q.includes("report") || q.includes("analytic")) {
+                  router.push(`/analytics`);
+                } else if (q.includes("user") || q.includes("admin")) {
+                  router.push(`/users`);
+                } else {
+                  // Default: go to orders with search pre-filled via URL
+                  router.push(`/orders`);
+                }
+                setSearchQuery("");
+              }
+            }}
             className="pl-10 h-10 bg-muted/50 border-0 focus-visible:ring-2 focus-visible:ring-primary/50"
           />
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl" asChild>
-            <Link href="/notifications">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              {unreadCount > 0 && (
-                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-destructive p-0 text-[10px] flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Badge>
-              )}
-              <span className="sr-only">Notifications</span>
-            </Link>
-          </Button>
-        </motion.div>
+        <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl" asChild>
+          <Link href="/notifications">
+            <Bell className="h-5 w-5 text-muted-foreground" />
+            {unreadCount > 0 && (
+              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-destructive p-0 text-[10px] flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Badge>
+            )}
+            <span className="sr-only">Notifications</span>
+          </Link>
+        </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 @RestController
 @RequestMapping("/api/vendors")
 @RequiredArgsConstructor
@@ -27,10 +26,11 @@ public class VendorController {
     
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
-    public ResponseEntity<List<VendorResponse>> getAllVendors() {
-        return ResponseEntity.ok(vendorService.getAllVendors());
-    }
-    
+    public ResponseEntity<PagedResponse<VendorResponse>> getAllVendors(
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
+        return ResponseEntity.ok(vendorService.getAllVendors(page, size));
+    }    
     @GetMapping("/{vendorId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<VendorResponse> getVendor(@PathVariable Long vendorId) {
@@ -53,8 +53,10 @@ public class VendorController {
     
     @PostMapping("/{vendorId}/verify")
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
-    public ResponseEntity<VendorResponse> verifyVendor(@PathVariable Long vendorId) {
-        return ResponseEntity.ok(vendorService.verifyVendor(vendorId));
+    public ResponseEntity<VendorResponse> verifyVendor(
+            @PathVariable Long vendorId,
+            @RequestHeader("X-User-Id") Long verifiedByUserId) {
+        return ResponseEntity.ok(vendorService.verifyVendor(vendorId, verifiedByUserId));
     }
     
     @GetMapping("/status/{status}")
@@ -67,6 +69,11 @@ public class VendorController {
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<VendorCategoryResponse>> getAllCategories() {
         return ResponseEntity.ok(vendorService.getAllCategories());
+    }
+
+    @GetMapping("/categories/{categoryId}")
+    public ResponseEntity<VendorCategoryResponse> getCategoryById(@PathVariable Long categoryId) {
+        return ResponseEntity.ok(vendorService.getCategoryById(categoryId));
     }
     
     @PostMapping("/categories")

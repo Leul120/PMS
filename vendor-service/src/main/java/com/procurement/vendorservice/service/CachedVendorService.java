@@ -26,7 +26,7 @@ public class CachedVendorService {
     /**
      * Get vendor by ID with caching.
      */
-    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-id:' + #vendorId")
+    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-id:' + #vendorId", sync = true)
     @Transactional(readOnly = true)
     public Optional<Vendor> getVendorById(Long vendorId) {
         log.debug("Fetching vendor {} from database", vendorId);
@@ -36,7 +36,7 @@ public class CachedVendorService {
     /**
      * Get vendor by email with caching.
      */
-    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-email:' + #email")
+    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-email:' + #email", sync = true)
     @Transactional(readOnly = true)
     public Optional<Vendor> getVendorByEmail(String email) {
         log.debug("Fetching vendor with email {} from database", email);
@@ -81,7 +81,7 @@ public class CachedVendorService {
     /**
      * Get vendors by compliance status with caching.
      */
-    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-status:' + #status")
+    @Cacheable(value = "vendors", key = "'vendor-service:vendors:by-status:' + #status", sync = true)
     @Transactional(readOnly = true)
     public List<Vendor> getVendorsByComplianceStatus(String status) {
         log.debug("Fetching vendors by compliance status: {}", status);

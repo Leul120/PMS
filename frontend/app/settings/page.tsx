@@ -12,18 +12,28 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { settingsApi } from "@/lib/api";
-import { Loader2, Save, Bell, Shield, Building2, Users, CreditCard, Globe } from "lucide-react";
+import { RequireRole } from "@/components/require-role";
+import { useAuthStore } from "@/lib/auth-store";
+import { Loader2, Save, Bell, Shield, Building2, Users, CreditCard, Globe, TrendingUp } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canUpdateSettings = hasPermission("settings:update");
 
   // General settings
   const [companyName, setCompanyName] = useState("");
   const [taxId, setTaxId] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [timezone, setTimezone] = useState("UTC");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
+  const [language, setLanguage] = useState("English (US)");
+  const [dateFormat, setDateFormat] = useState("MM/DD/YYYY");
 
   // Notification settings
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -38,6 +48,44 @@ export default function SettingsPage() {
   const [sessionTimeout, setSessionTimeout] = useState("30");
   const [passwordExpiry, setPasswordExpiry] = useState("90");
   const [loginNotifications, setLoginNotifications] = useState(true);
+
+  // Scoring weights (Admin only)
+  const [weightTimeliness, setWeightTimeliness] = useState("35");
+  const [weightQuality, setWeightQuality] = useState("35");
+  const [weightCost, setWeightCost] = useState("20");
+  const [weightResponsiveness, setWeightResponsiveness] = useState("10");
+  const [savingWeights, setSavingWeights] = useState(false);
+
+  const totalWeight = (
+    (parseFloat(weightTimeliness) || 0) +
+    (parseFloat(weightQuality) || 0) +
+    (parseFloat(weightCost) || 0) +
+    (parseFloat(weightResponsiveness) || 0)
+  );
+
+  async function handleSaveWeights(e: React.FormEvent) {
+    e.preventDefault();
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      toast({ title: "Invalid weights", description: "Weights must sum to exactly 100%.", variant: "destructive" });
+      return;
+    }
+    setSavingWeights(true);
+    try {
+      await settingsApi.updateSettings({
+        scoringWeights: {
+          timeliness: parseFloat(weightTimeliness) / 100,
+          quality: parseFloat(weightQuality) / 100,
+          cost: parseFloat(weightCost) / 100,
+          responsiveness: parseFloat(weightResponsiveness) / 100,
+        },
+      });
+      toast({ title: "Weights saved", description: "Scoring weights have been updated." });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save weights", variant: "destructive" });
+    } finally {
+      setSavingWeights(false);
+    }
+  }
 
   useEffect(() => {
     loadSettings();
@@ -55,6 +103,12 @@ export default function SettingsPage() {
         setTaxId(settings.taxId || "");
         setCurrency(settings.currency || "USD");
         setTimezone(settings.timezone || "UTC");
+        setAddress(settings.address || "");
+        setCity(settings.city || "");
+        setState(settings.state || "");
+        setZip(settings.zip || "");
+        setLanguage(settings.language || "English (US)");
+        setDateFormat(settings.dateFormat || "MM/DD/YYYY");
       }
       if (notifications) {
         setEmailNotifications(notifications.email ?? true);
@@ -81,7 +135,7 @@ export default function SettingsPage() {
     try {
       setSaving(true);
       await Promise.all([
-        settingsApi.updateSettings({ companyName, taxId, currency, timezone }),
+        settingsApi.updateSettings({ companyName, taxId, currency, timezone, address, city, state, zip, language, dateFormat }),
         settingsApi.updateNotifications({ email: emailNotifications, poApprovals, deliveryAlerts, vendorUpdates, lowStockAlerts, dailyDigest }),
         settingsApi.updateSecurity({ twoFactor, sessionTimeout: parseInt(sessionTimeout), passwordExpiry: parseInt(passwordExpiry), loginNotifications }),
       ]);
@@ -104,6 +158,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -111,21 +166,23 @@ export default function SettingsPage() {
             <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
             <p className="text-xs text-gray-500 mt-0.5">Manage system preferences</p>
           </div>
+          {canUpdateSettings && (
           <Button onClick={handleSave} disabled={saving} size="sm">
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             Save Changes
           </Button>
+          )}
         </div>
 
         <Tabs defaultValue="general" className="space-y-3">
-          <TabsList className="grid w-full grid-cols-5 lg:w-[500px] h-8 text-xs">
+          <TabsList className={`grid w-full h-8 text-xs ${canUpdateSettings ? "grid-cols-6 lg:w-[600px]" : "grid-cols-5 lg:w-[500px]"}`}>
             <TabsTrigger value="general" className="text-xs">General</TabsTrigger>
             <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
             <TabsTrigger value="security" className="text-xs">Security</TabsTrigger>
             <TabsTrigger value="integrations" className="text-xs">Integrations</TabsTrigger>
             <TabsTrigger value="billing" className="text-xs">Billing</TabsTrigger>
+            {canUpdateSettings && <TabsTrigger value="scoring" className="text-xs">Scoring</TabsTrigger>}
           </TabsList>
-
           <TabsContent value="general" className="space-y-3">
             <Card className="border-0 shadow-sm">
               <CardHeader className="py-3 px-4 border-b border-gray-100">
@@ -147,26 +204,28 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="address" className="text-xs">Address</Label>
-                  <Input id="address" defaultValue="123 Business Ave, Suite 100" className="h-8 text-xs border-gray-200" />
+                  <Input id="address" value={address} onChange={e => setAddress(e.target.value)} className="h-8 text-xs border-gray-200" />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="city" className="text-xs">City</Label>
-                    <Input id="city" defaultValue="New York" className="h-8 text-xs border-gray-200" />
+                    <Input id="city" value={city} onChange={e => setCity(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="state" className="text-xs">State</Label>
-                    <Input id="state" defaultValue="NY" className="h-8 text-xs border-gray-200" />
+                    <Input id="state" value={state} onChange={e => setState(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="zip" className="text-xs">ZIP</Label>
-                    <Input id="zip" defaultValue="10001" className="h-8 text-xs border-gray-200" />
+                    <Input id="zip" value={zip} onChange={e => setZip(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                 </div>
-                <Button size="sm" className="h-8 text-xs">
+                {canUpdateSettings && (
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleSave} disabled={saving}>
                   <Save className="mr-1.5 h-3.5 w-3.5" />
-                  Save Changes
+                  Save
                 </Button>
+                )}
               </CardContent>
             </Card>
 
@@ -181,7 +240,7 @@ export default function SettingsPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="language" className="text-xs">Language</Label>
-                    <Input id="language" defaultValue="English (US)" className="h-8 text-xs border-gray-200" />
+                    <Input id="language" value={language} onChange={e => setLanguage(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="timezone" className="text-xs">Timezone</Label>
@@ -195,7 +254,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="date-format" className="text-xs">Date Format</Label>
-                    <Input id="date-format" defaultValue="MM/DD/YYYY" className="h-8 text-xs border-gray-200" />
+                    <Input id="date-format" value={dateFormat} onChange={e => setDateFormat(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                 </div>
               </CardContent>
@@ -255,20 +314,20 @@ export default function SettingsPage() {
                   <Label className="text-xs">Notification Events</Label>
                   <div className="space-y-1.5">
                     <div className="flex items-center space-x-2">
-                      <Checkbox id="po-approved" defaultChecked className="h-3.5 w-3.5" />
+                      <Checkbox id="po-approved" checked={poApprovals} onCheckedChange={(v) => setPoApprovals(!!v)} className="h-3.5 w-3.5" />
                       <Label htmlFor="po-approved" className="font-normal text-xs">Purchase Order Approved</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox id="delivery" defaultChecked className="h-3.5 w-3.5" />
+                      <Checkbox id="delivery" checked={deliveryAlerts} onCheckedChange={(v) => setDeliveryAlerts(!!v)} className="h-3.5 w-3.5" />
                       <Label htmlFor="delivery" className="font-normal text-xs">Delivery Updates</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox id="rfq" className="h-3.5 w-3.5" />
+                      <Checkbox id="rfq" checked={vendorUpdates} onCheckedChange={(v) => setVendorUpdates(!!v)} className="h-3.5 w-3.5" />
                       <Label htmlFor="rfq" className="font-normal text-xs">New RFQ Submissions</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox id="vendor" defaultChecked className="h-3.5 w-3.5" />
-                      <Label htmlFor="vendor" className="font-normal text-xs">Vendor Updates</Label>
+                      <Checkbox id="vendor" checked={lowStockAlerts} onCheckedChange={(v) => setLowStockAlerts(!!v)} className="h-3.5 w-3.5" />
+                      <Label htmlFor="vendor" className="font-normal text-xs">Low Stock Alerts</Label>
                     </div>
                   </div>
                 </div>
@@ -303,7 +362,7 @@ export default function SettingsPage() {
                 <Separator className="bg-gray-100" />
                 <div className="space-y-1.5">
                   <Label htmlFor="session" className="text-xs">Session Timeout (minutes)</Label>
-                  <Input id="session" type="number" defaultValue="30" className="h-8 text-xs border-gray-200 w-[120px]" />
+                  <Input id="session" type="number" value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="h-8 text-xs border-gray-200 w-[120px]" />
                 </div>
               </CardContent>
             </Card>
@@ -314,8 +373,22 @@ export default function SettingsPage() {
               <CardHeader className="py-3 px-4 border-b border-gray-100">
                 <CardTitle className="text-sm font-medium text-gray-700">System Integrations</CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                <p className="text-xs text-gray-500">No integrations configured yet.</p>
+              <CardContent className="p-4 space-y-3">
+                {[
+                  { name: "Email (SMTP)", status: "Configured", desc: "Outbound email for notifications and password resets", color: "bg-emerald-100 text-emerald-700" },
+                  { name: "Apache Kafka", status: "Active", desc: "Event streaming for real-time notifications", color: "bg-emerald-100 text-emerald-700" },
+                  { name: "Redis Cache", status: "Active", desc: "Distributed caching and session management", color: "bg-emerald-100 text-emerald-700" },
+                  { name: "ERP System", status: "Not configured", desc: "Connect to your ERP for inventory sync", color: "bg-gray-100 text-gray-600" },
+                  { name: "Payment Gateway", status: "Not configured", desc: "Enable automated invoice payments", color: "bg-gray-100 text-gray-600" },
+                ].map(({ name, status, desc, color }) => (
+                  <div key={name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <div>
+                      <p className="text-xs font-medium text-gray-900">{name}</p>
+                      <p className="text-[11px] text-gray-500">{desc}</p>
+                    </div>
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${color}`}>{status}</span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </TabsContent>
@@ -328,13 +401,85 @@ export default function SettingsPage() {
                   Billing Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                <p className="text-xs text-gray-500">Billing information will be available here.</p>
+              <CardContent className="p-4 space-y-3">
+                <div className="rounded-md bg-blue-50 border border-blue-100 p-3">
+                  <p className="text-xs font-medium text-blue-800">Enterprise Plan</p>
+                  <p className="text-[11px] text-blue-600 mt-0.5">Unlimited users Â· All features Â· Priority support</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div><p className="text-gray-500">Billing Cycle</p><p className="font-medium mt-0.5">Annual</p></div>
+                  <div><p className="text-gray-500">Next Renewal</p><p className="font-medium mt-0.5">Contact admin</p></div>
+                  <div><p className="text-gray-500">Payment Method</p><p className="font-medium mt-0.5">Invoice</p></div>
+                  <div><p className="text-gray-500">Currency</p><p className="font-medium mt-0.5">{currency}</p></div>
+                </div>
+                <p className="text-[11px] text-gray-400">To update billing details, contact your account manager.</p>
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Scoring Weights â€â€ Admin only */}
+          {canUpdateSettings && (
+            <TabsContent value="scoring" className="space-y-3">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="py-3 px-4 border-b border-gray-100">
+                  <CardTitle className="text-sm font-medium text-gray-700">Vendor Scoring Weights</CardTitle>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Configure how each KPI contributes to the overall vendor score. Weights must sum to 100%.
+                  </p>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <form onSubmit={handleSaveWeights} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      {[
+                        { label: "Timeliness (%)", value: weightTimeliness, setter: setWeightTimeliness, desc: "On-time delivery performance" },
+                        { label: "Quality (%)", value: weightQuality, setter: setWeightQuality, desc: "Accepted quantity vs delivered" },
+                        { label: "Cost Competitiveness (%)", value: weightCost, setter: setWeightCost, desc: "Bid price vs lowest bid" },
+                        { label: "Responsiveness (%)", value: weightResponsiveness, setter: setWeightResponsiveness, desc: "On-time RFQ responses" },
+                      ].map(({ label, value, setter, desc }) => (
+                        <div key={label} className="space-y-1.5">
+                          <Label className="text-xs">{label}</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={value}
+                            onChange={(e) => setter(e.target.value)}
+                            className="h-8 text-xs border-gray-200 w-[100px]"
+                          />
+                          <p className="text-[10px] text-gray-400">{desc}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={`rounded-md p-3 text-xs flex items-center gap-2 ${
+                      Math.abs(totalWeight - 100) < 0.01
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}>
+                      <span className="font-medium">Total: {totalWeight.toFixed(0)}%</span>
+                      {Math.abs(totalWeight - 100) < 0.01
+                        ? " âœâ€œ Valid"
+                        : ` â€â€ must equal 100% (${totalWeight > 100 ? "reduce" : "increase"} by ${Math.abs(100 - totalWeight).toFixed(0)}%)`}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={savingWeights || Math.abs(totalWeight - 100) > 0.01}
+                    >
+                      {savingWeights ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
+                      Save Weights
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </DashboardLayout>
+    </RequireRole>
   );
 }

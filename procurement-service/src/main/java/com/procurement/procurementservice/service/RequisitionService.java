@@ -8,6 +8,9 @@ import com.procurement.procurementservice.repository.ApprovalHistoryRepository;
 import com.procurement.procurementservice.repository.PurchaseRequisitionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,10 +65,13 @@ public class RequisitionService {
         return mapToRequisitionResponse(savedRequisition);
     }
     
-    public List<RequisitionResponse> getAllRequisitions() {
-        return requisitionRepository.findAll().stream()
-            .map(this::mapToRequisitionResponse)
-            .collect(Collectors.toList());
+    public PagedResponse<RequisitionResponse> getAllRequisitions(int page, int size) {
+        Page<PurchaseRequisition> p = requisitionRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        return PagedResponse.<RequisitionResponse>builder()
+            .content(p.getContent().stream().map(this::mapToRequisitionResponse).collect(Collectors.toList()))
+            .page(p.getNumber()).size(p.getSize())
+            .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
     
     public RequisitionResponse getRequisition(Long requisitionId) {
@@ -168,3 +174,5 @@ public class RequisitionService {
             .build();
     }
 }
+
+

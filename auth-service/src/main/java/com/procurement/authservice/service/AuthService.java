@@ -2,10 +2,12 @@ package com.procurement.authservice.service;
 
 import com.procurement.authservice.dto.*;
 import com.procurement.authservice.entity.Role;
+import com.procurement.authservice.entity.SystemSettings;
 import com.procurement.authservice.entity.User;
 import com.procurement.authservice.infrastructure.cache.AuthCacheNames;
 import com.procurement.authservice.infrastructure.lock.DistributedLock;
 import com.procurement.authservice.repository.RoleRepository;
+import com.procurement.authservice.repository.SystemSettingsRepository;
 import com.procurement.authservice.repository.UserRepository;
 import com.procurement.authservice.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuditLogService auditLogService;
+    private final SystemSettingsRepository settingsRepository;
     
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -124,7 +127,7 @@ public class AuthService {
         return mapToUserResponse(savedUser);
     }
     
-    @Cacheable(value = "users", key = AuthCacheNames.USER_BY_ID + ":#userId")
+    @Cacheable(value = "users", key = AuthCacheNames.USER_BY_ID + ":#userId", sync = true)
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -230,48 +233,100 @@ public class AuthService {
     }
     
     public Map<String, Object> getSettings() {
-        Map<String, Object> settings = new java.util.HashMap<>();
-        settings.put("companyName", "ProcurePro Inc.");
-        settings.put("taxId", "");
-        settings.put("timezone", "UTC");
-        settings.put("currency", "USD");
-        return settings;
+        Map<String, Object> defaults = new java.util.LinkedHashMap<>();
+        defaults.put("companyName", "ProcurePro Inc.");
+        defaults.put("taxId", "");
+        defaults.put("timezone", "UTC");
+        defaults.put("currency", "USD");
+        // Overlay persisted values
+        settingsRepository.findByCategoryAndUserId("SYSTEM", null)
+            .forEach(s -> defaults.put(s.getSettingKey(), s.getSettingValue()));
+        return defaults;
     }
-    
+
+    @Transactional
     public Map<String, Object> updateSettings(Map<String, Object> settings) {
-        // In a real implementation, this would persist settings to a database
-        log.info("Settings updated: {}", settings);
+        settings.forEach((key, value) -> {
+            SystemSettings s = settingsRepository
+                .findBySettingKeyAndCategoryAndUserId(key, "SYSTEM", null)
+                .orElse(new SystemSettings(null, key, null, "SYSTEM", null));
+            s.setSettingValue(value != null ? value.toString() : null);
+            settingsRepository.save(s);
+        });
+        auditLogService.logAction("UPDATE_SETTINGS", "SystemSettings", null,
+            "System settings updated: " + settings.keySet(), null);
+        log.info("System settings persisted: {}", settings.keySet());
         return getSettings();
     }
-    
+
     public Map<String, Object> getNotificationSettings() {
-        Map<String, Object> settings = new java.util.HashMap<>();
-        settings.put("email", true);
-        settings.put("poApprovals", true);
-        settings.put("deliveryAlerts", true);
-        settings.put("vendorUpdates", false);
-        settings.put("lowStockAlerts", true);
-        settings.put("dailyDigest", false);
-        return settings;
+        Map<String, Object> defaults = new java.util.LinkedHashMap<>();
+        defaults.put("email", true);
+        defaults.put("poApprovals", true);
+        defaults.put("deliveryAlerts", true);
+        defaults.put("vendorUpdates", false);
+        defaults.put("lowStockAlerts", true);
+        defaults.put("dailyDigest", false);
+        settingsRepository.findByCategoryAndUserId("NOTIFICATION", null)
+            .forEach(s -> defaults.put(s.getSettingKey(), parseBoolean(s.getSettingValue())));
+        return defaults;
     }
-    
+
+    @Transactional
     public Map<String, Object> updateNotificationSettings(Map<String, Object> settings) {
-        log.info("Notification settings updated: {}", settings);
+        settings.forEach((key, value) -> {
+            SystemSettings s = settingsRepository
+                .findBySettingKeyAndCategoryAndUserId(key, "NOTIFICATION", null)
+                .orElse(new SystemSettings(null, key, null, "NOTIFICATION", null));
+            s.setSettingValue(value != null ? value.toString() : null);
+            settingsRepository.save(s);
+        });
+        log.info("Notification settings persisted: {}", settings.keySet());
         return getNotificationSettings();
     }
-    
+
     public Map<String, Object> getSecuritySettings() {
-        Map<String, Object> settings = new java.util.HashMap<>();
-        settings.put("twoFactor", false);
-        settings.put("sessionTimeout", 30);
-        settings.put("passwordExpiry", 90);
-        settings.put("loginNotifications", true);
-        return settings;
+        Map<String, Object> defaults = new java.util.LinkedHashMap<>();
+        defaults.put("twoFactor", false);
+        defaults.put("sessionTimeout", 30);
+        defaults.put("passwordExpiry", 90);
+        defaults.put("loginNotifications", true);
+        settingsRepository.findByCategoryAndUserId("SECURITY", null)
+            .forEach(s -> {
+                // Numeric fields
+                if ("sessionTimeout".equals(s.getSettingKey()) || "passwordExpiry".equals(s.getSettingKey())) {
+                    try { defaults.put(s.getSettingKey(), Integer.parseInt(s.getSettingValue())); }
+                    catch (NumberFormatException ignored) {}
+                } else {
+                    defaults.put(s.getSettingKey(), parseBoolean(s.getSettingValue()));
+                }
+            });
+        return defaults;
     }
-    
+
+    @Transactional
     public Map<String, Object> updateSecuritySettings(Map<String, Object> settings) {
-        log.info("Security settings updated: {}", settings);
+        // Validate sessionTimeout >= 15 minutes
+        if (settings.containsKey("sessionTimeout")) {
+            int timeout = Integer.parseInt(settings.get("sessionTimeout").toString());
+            if (timeout < 15) throw new RuntimeException("Session timeout must be at least 15 minutes");
+        }
+        settings.forEach((key, value) -> {
+            SystemSettings s = settingsRepository
+                .findBySettingKeyAndCategoryAndUserId(key, "SECURITY", null)
+                .orElse(new SystemSettings(null, key, null, "SECURITY", null));
+            s.setSettingValue(value != null ? value.toString() : null);
+            settingsRepository.save(s);
+        });
+        auditLogService.logAction("UPDATE_SECURITY_SETTINGS", "SystemSettings", null,
+            "Security settings updated: " + settings.keySet(), null);
+        log.info("Security settings persisted: {}", settings.keySet());
         return getSecuritySettings();
+    }
+
+    private Object parseBoolean(String value) {
+        if (value == null) return false;
+        return Boolean.parseBoolean(value);
     }
     
     private UserResponse mapToUserResponse(User user) {
@@ -283,6 +338,8 @@ public class AuthService {
             .roleName(user.getRole().getRoleName())
             .lastLogin(user.getLastLogin())
             .registrationDate(user.getRegistrationDate())
+            .active(!Boolean.TRUE.equals(user.getAccountLocked()))
+            .accountLocked(Boolean.TRUE.equals(user.getAccountLocked()))
             .build();
     }
 }

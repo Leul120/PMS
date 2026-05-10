@@ -1,37 +1,51 @@
-server:
+﻿server:
   port: 8088
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: inventory-service
   datasource:
-    url: jdbc:postgresql://postgres:5432/inventory_db
-    username: postgres
-    password: postgres
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5438/inventorydb}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:secret}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: update
     show-sql: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: inventory-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.procurement.*,java.util.*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: java.util.HashMap
+    listener:
+      missing-topics-fatal: false
   cloud:
     kubernetes:
       discovery:
-        enabled: true
-        all-namespaces: false
+        enabled: false
       loadbalancer:
         mode: service
 
-# Service URLs
 services:
   auth:
-    url: ${AUTH_SERVICE_URL:http://auth-service:8081}
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
 
-springdoc:
-  api-docs:
-    path: /api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-
-# Resilience4j Circuit Breaker
 resilience4j:
   circuitbreaker:
     configs:
@@ -43,3 +57,11 @@ resilience4j:
     instances:
       authService:
         baseConfig: default
+
+jwt:
+  secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
+logging:
+  level:
+    com.procurement: DEBUG
+
+

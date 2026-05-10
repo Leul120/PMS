@@ -3,6 +3,8 @@ package com.procurement.authservice.controller;
 import com.procurement.authservice.dto.*;
 import com.procurement.authservice.service.AuthService;
 import com.procurement.authservice.service.AuditLogService;
+import com.procurement.authservice.service.PasswordResetService;
+import com.procurement.authservice.service.UserManagementService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,8 @@ public class AuthController {
     
     private final AuthService authService;
     private final AuditLogService auditLogService;
+    private final PasswordResetService passwordResetService;
+    private final UserManagementService userManagementService;
     
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
@@ -39,6 +43,22 @@ public class AuthController {
     public ResponseEntity<Void> logout() {
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.forgotPassword(request.getEmail());
+        // Always return 200 to avoid user enumeration
+        return ResponseEntity.ok(Map.of("message",
+                "If that email is registered, a reset link has been sent."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok(Map.of("message", "Password has been reset successfully."));
+    }
     
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal Long userId) {
@@ -54,13 +74,13 @@ public class AuthController {
     }
     
     @GetMapping("/users")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<List<UserResponse>> listUsers() {
         return ResponseEntity.ok(authService.getAllUsers());
     }
     
     @GetMapping("/audit-logs")
-    @PreAuthorize("hasRole('AUDITOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR')")
     public ResponseEntity<List<AuditLogResponse>> getAuditLogs() {
         return ResponseEntity.ok(auditLogService.getAllAuditLogs());
     }
@@ -74,8 +94,10 @@ public class AuthController {
     // Admin user management endpoints
     @PostMapping("/admin/users")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.ok(authService.register(request));
+    public ResponseEntity<UserResponse> createUser(
+            @Valid @RequestBody CreateUserRequest request,
+            @AuthenticationPrincipal Long adminId) {
+        return ResponseEntity.ok(userManagementService.createUser(request, adminId != null ? adminId : 0L));
     }
     
     @PutMapping("/admin/users/{userId}/role")

@@ -24,8 +24,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { poApi } from "@/lib/api";
+import type { PagedResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { PODialog } from "./po-dialog";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { RequireRole } from "@/components/require-role";
+import { useAuthStore } from "@/lib/auth-store";
 import { 
   Plus, 
   Search, 
@@ -60,18 +67,41 @@ export default function ProcurementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 50;
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const { toast } = useToast();
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const hasRole = useAuthStore((state) => state.hasRole);
+  const canCreatePO = hasPermission("po:create");
+  const canApprovePO = hasPermission("po:approve");
+  const canRejectPO = hasPermission("po:reject");
 
   useEffect(() => {
-    loadPurchaseOrders();
-  }, []);
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
+    loadPurchaseOrders(currentPage);
+  }, [currentPage]);
 
-  async function loadPurchaseOrders() {
+  async function loadPurchaseOrders(page = 0) {
     try {
       setLoading(true);
-      const data = await poApi.getAll();
-      setPurchaseOrders(data);
-      setFilteredOrders(data);
+      const response = await poApi.getAll(page, PAGE_SIZE);
+      const items = response.content ?? [];
+      const normalised = items.map((po: any) => ({
+        ...po,
+        id: String(po.id || po.poId),
+        poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
+        vendorName: po.vendorName || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+        createdAt: po.createdAt || po.issueDate,
+        deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
+        totalAmount: Number(po.totalAmount) || 0,
+      }));
+      setPurchaseOrders(normalised);
+      setFilteredOrders(normalised);
+      setTotalPages(response.totalPages ?? 0);
+      setTotalElements(response.totalElements ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load purchase orders");
     } finally {
@@ -79,23 +109,24 @@ export default function ProcurementPage() {
     }
   }
 
-  // Filter orders based on search query
+  // Filter orders based on search query and status
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredOrders(purchaseOrders);
-    } else {
+    let filtered = purchaseOrders;
+    if (statusFilter !== "ALL") {
+      filtered = filtered.filter(po => po.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      setFilteredOrders(
-        purchaseOrders.filter(
-          (po) =>
-            po.poNumber?.toLowerCase().includes(query) ||
-            po.vendorName?.toLowerCase().includes(query) ||
-            po.description?.toLowerCase().includes(query) ||
-            po.status?.toLowerCase().includes(query)
-        )
+      filtered = filtered.filter(
+        (po) =>
+          po.poNumber?.toLowerCase().includes(query) ||
+          po.vendorName?.toLowerCase().includes(query) ||
+          po.description?.toLowerCase().includes(query) ||
+          po.status?.toLowerCase().includes(query)
       );
     }
-  }, [searchQuery, purchaseOrders]);
+    setFilteredOrders(filtered);
+  }, [searchQuery, purchaseOrders, statusFilter]);
 
   // Export purchase orders to CSV
   function handleExport() {
@@ -142,14 +173,18 @@ export default function ProcurementPage() {
   }
 
   const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'APPROVED': return 'success';
-      case 'PENDING': return 'warning';
-      case 'REJECTED': return 'destructive';
-      default: return 'secondary';
-    }
+    const s = status?.toLowerCase() || "";
+    if (s.includes("approved") && !s.includes("pending")) return "success";
+    if (s.includes("pending") || s === "draft") return "warning";
+    if (s.includes("rejected")) return "destructive";
+    return "secondary";
   };
+
+  const isPending = (status: string) =>
+    status?.toLowerCase().includes("pending") || status?.toLowerCase() === "draft";
+
   return (
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -162,17 +197,19 @@ export default function ProcurementPage() {
               <Download className="mr-1.5 h-3.5 w-3.5" />
               Export
             </Button>
+            {canCreatePO && (
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Create PO
             </Button>
+            )}
           </div>
         </div>
 
         {error && (
           <div className="rounded-md bg-red-50 p-3 text-red-600 text-xs">
             <p>{error}</p>
-            <Button variant="outline" size="sm" onClick={loadPurchaseOrders} className="mt-2 text-xs h-7">
+            <Button variant="outline" size="sm" onClick={() => loadPurchaseOrders(currentPage)} className="mt-2 text-xs h-7">
               Retry
             </Button>
           </div>
@@ -188,19 +225,19 @@ export default function ProcurementPage() {
           <Card className="border-0 shadow-sm bg-amber-50">
             <CardContent className="p-3">
               <p className="text-xs text-amber-600">Pending</p>
-              <p className="text-xl font-semibold text-amber-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => po.status === 'PENDING').length}</p>
+              <p className="text-xl font-semibold text-amber-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => isPending(po.status)).length}</p>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm bg-emerald-50">
             <CardContent className="p-3">
               <p className="text-xs text-emerald-600">Approved</p>
-              <p className="text-xl font-semibold text-emerald-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => po.status === 'APPROVED').length}</p>
+              <p className="text-xl font-semibold text-emerald-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => po.status?.toLowerCase().includes("approved") && !po.status?.toLowerCase().includes("pending")).length}</p>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm bg-red-50">
             <CardContent className="p-3">
               <p className="text-xs text-red-600">Rejected</p>
-              <p className="text-xl font-semibold text-red-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => po.status === 'REJECTED').length}</p>
+              <p className="text-xl font-semibold text-red-700 mt-1">{loading ? "-" : purchaseOrders.filter(po => po.status?.toLowerCase().includes("rejected")).length}</p>
             </CardContent>
           </Card>
         </div>
@@ -231,10 +268,19 @@ export default function ProcurementPage() {
                       className="pl-8 w-full sm:w-[300px]"
                     />
                   </div>
-                  <Button variant="outline" onClick={() => toast({ title: "Filter", description: "Advanced filtering coming soon!" })}>
-                    <Filter className="mr-2 h-4 w-4" />
-                    Filter
-                  </Button>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[140px] h-9">
+                      <Filter className="mr-1.5 h-3.5 w-3.5" />
+                      <SelectValue placeholder="Filter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Statuses</SelectItem>
+                      <SelectItem value="Approved">Approved</SelectItem>
+                      <SelectItem value="Pending Approval">Pending</SelectItem>
+                      <SelectItem value="Rejected">Rejected</SelectItem>
+                      <SelectItem value="Draft">Draft</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent>
@@ -285,17 +331,22 @@ export default function ProcurementPage() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => { setSelectedPO(po); setDialogOpen(true); }}>View Details</DropdownMenuItem>
+                                  {canCreatePO && (
                                   <DropdownMenuItem onClick={() => { setSelectedPO(po); setDialogOpen(true); }}>Edit Order</DropdownMenuItem>
-                                  {po.status === "PENDING" && (
+                                  )}
+                                  {isPending(po.status) && (canApprovePO || canRejectPO) && (
                                     <>
                                       <DropdownMenuSeparator />
+                                      {canApprovePO && (
                                       <DropdownMenuItem onClick={() => handleApprove(po.id)}>
                                         Approve
                                       </DropdownMenuItem>
+                                      )}
+                                      {canRejectPO && (
                                       <DropdownMenuItem onClick={() => handleReject(po.id)} className="text-destructive">
                                         Reject
                                       </DropdownMenuItem>
+                                      )}
                                     </>
                                   )}
                                 </DropdownMenuContent>
@@ -308,6 +359,14 @@ export default function ProcurementPage() {
                   </Table>
                 )}
               </CardContent>
+              <PaginationControls
+                page={currentPage}
+                totalPages={totalPages}
+                totalElements={totalElements}
+                size={PAGE_SIZE}
+                onPageChange={(p) => setCurrentPage(p)}
+                loading={loading}
+              />
             </Card>
           </TabsContent>
 
@@ -329,22 +388,22 @@ export default function ProcurementPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {purchaseOrders.filter(po => po.status === "PENDING").length === 0 ? (
+                    {purchaseOrders.filter(po => isPending(po.status)).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           No pending orders found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      purchaseOrders.filter(po => po.status === "PENDING").map((po) => (
+                      purchaseOrders.filter(po => isPending(po.status)).map((po) => (
                         <TableRow key={po.id}>
                           <TableCell className="font-medium">{po.poNumber}</TableCell>
                           <TableCell>{po.description || po.title || "N/A"}</TableCell>
                           <TableCell>{po.vendorName || "N/A"}</TableCell>
                           <TableCell className="font-medium">${po.totalAmount?.toLocaleString() || 0}</TableCell>
-                          <TableCell className="text-right">
-                            <Button size="sm" variant="outline" className="mr-2" onClick={() => handleReject(po.id)}>Reject</Button>
-                            <Button size="sm" onClick={() => handleApprove(po.id)}>Approve</Button>
+                        <TableCell className="text-right">
+                            {canRejectPO && <Button size="sm" variant="outline" className="mr-2" onClick={() => handleReject(po.id)}>Reject</Button>}
+                            {canApprovePO && <Button size="sm" onClick={() => handleApprove(po.id)}>Approve</Button>}
                           </TableCell>
                         </TableRow>
                       ))
@@ -373,14 +432,14 @@ export default function ProcurementPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {purchaseOrders.filter(po => po.status === "APPROVED").length === 0 ? (
+                    {purchaseOrders.filter(po => po.status?.toLowerCase().includes("approved") && !po.status?.toLowerCase().includes("pending")).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           No approved orders found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      purchaseOrders.filter(po => po.status === "APPROVED").map((po) => (
+                      purchaseOrders.filter(po => po.status?.toLowerCase().includes("approved") && !po.status?.toLowerCase().includes("pending")).map((po) => (
                         <TableRow key={po.id}>
                           <TableCell className="font-medium">{po.poNumber}</TableCell>
                           <TableCell>{po.description || po.title || "N/A"}</TableCell>
@@ -414,14 +473,14 @@ export default function ProcurementPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {purchaseOrders.filter(po => po.status === "REJECTED").length === 0 ? (
+                    {purchaseOrders.filter(po => po.status?.toLowerCase().includes("rejected")).length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           No rejected orders found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      purchaseOrders.filter(po => po.status === "REJECTED").map((po) => (
+                      purchaseOrders.filter(po => po.status?.toLowerCase().includes("rejected")).map((po) => (
                         <TableRow key={po.id}>
                           <TableCell className="font-medium">{po.poNumber}</TableCell>
                           <TableCell>{po.description || po.title || "N/A"}</TableCell>
@@ -441,9 +500,13 @@ export default function ProcurementPage() {
       
       <PODialog 
         open={dialogOpen} 
-        onOpenChange={setDialogOpen} 
-        onSuccess={loadPurchaseOrders} 
+        onOpenChange={(open) => { setDialogOpen(open); if (!open) setSelectedPO(null); }}
+        onSuccess={loadPurchaseOrders}
+        initialData={selectedPO}
       />
     </DashboardLayout>
+    </RequireRole>
   );
 }
+
+

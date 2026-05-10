@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 @RestController
 @RequestMapping("/api/purchase-orders")
 @RequiredArgsConstructor
@@ -27,8 +26,10 @@ public class PurchaseOrderController {
     
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
-    public ResponseEntity<List<PurchaseOrderResponse>> getAllPOs() {
-        return ResponseEntity.ok(poService.getAllPurchaseOrders());
+    public ResponseEntity<PagedResponse<PurchaseOrderResponse>> getAllPOs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(poService.getAllPurchaseOrders(page, size));
     }
     
     @GetMapping("/{poId}")
@@ -42,7 +43,7 @@ public class PurchaseOrderController {
     public ResponseEntity<PurchaseOrderResponse> approvePO(
             @PathVariable Long poId,
             @RequestHeader("X-User-Id") Long approverId,
-            @RequestHeader("X-User-Role") String approverRole) {
+            @RequestHeader(value = "X-User-Role", required = false, defaultValue = "MANAGER") String approverRole) {
         return ResponseEntity.ok(poService.approvePurchaseOrder(poId, approverId, approverRole));
     }
     
@@ -58,5 +59,13 @@ public class PurchaseOrderController {
             @PathVariable Long poId,
             @RequestParam String status) {
         return ResponseEntity.ok(poService.updateStatus(poId, status));
+    }
+
+    @PutMapping("/{poId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
+    public ResponseEntity<PurchaseOrderResponse> updatePO(
+            @PathVariable Long poId,
+            @Valid @RequestBody PurchaseOrderRequest request) {
+        return ResponseEntity.ok(poService.updatePurchaseOrder(poId, request));
     }
 }

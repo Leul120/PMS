@@ -10,6 +10,9 @@ import com.procurement.vendorservice.repository.VendorDocumentRepository;
 import com.procurement.vendorservice.repository.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,10 +57,17 @@ public class VendorService {
         return mapToVendorResponse(savedVendor);
     }
     
-    public List<VendorResponse> getAllVendors() {
-        return vendorRepository.findAll().stream()
-            .map(this::mapToVendorResponse)
-            .collect(Collectors.toList());
+    public PagedResponse<VendorResponse> getAllVendors(int page, int size) {
+        Page<Vendor> vendorPage = vendorRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        return PagedResponse.<VendorResponse>builder()
+            .content(vendorPage.getContent().stream().map(this::mapToVendorResponse).collect(Collectors.toList()))
+            .page(vendorPage.getNumber())
+            .size(vendorPage.getSize())
+            .totalElements(vendorPage.getTotalElements())
+            .totalPages(vendorPage.getTotalPages())
+            .last(vendorPage.isLast())
+            .build();
     }
     
     public VendorResponse getVendor(Long vendorId) {
@@ -94,24 +104,24 @@ public class VendorService {
     }
     
     @Transactional
-    public VendorResponse verifyVendor(Long vendorId) {
+    public VendorResponse verifyVendor(Long vendorId, Long verifiedByUserId) {
         Vendor vendor = vendorRepository.findById(vendorId)
             .orElseThrow(() -> new RuntimeException("Vendor not found"));
-        
+
         vendor.setComplianceStatus("Verified");
         Vendor verifiedVendor = vendorRepository.save(vendor);
-        
+
         VendorVerifiedEvent event = VendorVerifiedEvent.builder()
             .vendorId(vendor.getVendorId())
             .companyName(vendor.getCompanyName())
             .email(vendor.getEmail())
-            .verifiedBy("SYSTEM")
+            .verifiedBy(verifiedByUserId != null ? verifiedByUserId.toString() : "SYSTEM")
             .verifiedAt(LocalDateTime.now())
             .build();
-        
+
         kafkaTemplate.send("vendor.verified", event);
-        log.info("Vendor verified and event published: {}", vendorId);
-        
+        log.info("Vendor {} verified by user {}", vendorId, verifiedByUserId);
+
         return mapToVendorResponse(verifiedVendor);
     }
     
@@ -125,6 +135,12 @@ public class VendorService {
         return categoryRepository.findAll().stream()
             .map(this::mapToCategoryResponse)
             .collect(Collectors.toList());
+    }
+
+    public VendorCategoryResponse getCategoryById(Long categoryId) {
+        VendorCategory category = categoryRepository.findById(categoryId)
+            .orElseThrow(() -> new RuntimeException("Category not found: " + categoryId));
+        return mapToCategoryResponse(category);
     }
     
     @Transactional
@@ -143,15 +159,22 @@ public class VendorService {
     }
     
     private VendorResponse mapToVendorResponse(Vendor vendor) {
+        String compliance = vendor.getComplianceStatus();
+        boolean isVerified = "Verified".equalsIgnoreCase(compliance);
         return VendorResponse.builder()
             .vendorId(vendor.getVendorId())
+            .id(vendor.getVendorId())
             .companyName(vendor.getCompanyName())
             .contactPerson(vendor.getContactPerson())
             .email(vendor.getEmail())
             .categoryId(vendor.getCategory().getCategoryId())
             .categoryName(vendor.getCategory().getCategoryName())
-            .complianceStatus(vendor.getComplianceStatus())
+            .category(vendor.getCategory().getCategoryName())
+            .complianceStatus(compliance)
+            .status(isVerified ? "ACTIVE" : "PENDING")
+            .verified(isVerified)
             .phoneNumber(vendor.getPhoneNumber())
+            .phone(vendor.getPhoneNumber())
             .address(vendor.getAddress())
             .taxId(vendor.getTaxId())
             .build();
@@ -232,3 +255,5 @@ public class VendorService {
             .build();
     }
 }
+
+

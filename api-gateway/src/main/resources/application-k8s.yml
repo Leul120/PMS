@@ -35,7 +35,7 @@ spring:
         - id: procurement-service
           uri: lb://procurement-service
           predicates:
-            - Path=/api/purchase-orders/**
+            - Path=/api/purchase-orders/**,/api/procurement/**
           filters:
             - StripPrefix=0
         - id: delivery-invoice-service
@@ -53,13 +53,31 @@ spring:
         - id: analytics-service
           uri: lb://analytics-service
           predicates:
-            - Path=/api/reports/**,/api/dashboard/**
+            - Path=/api/reports/**,/api/dashboard/**,/api/analytics/**
           filters:
             - StripPrefix=0
         - id: notification-service
           uri: lb://notification-service
           predicates:
             - Path=/api/notifications/**
+          filters:
+            - StripPrefix=0
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/inventory/**
+          filters:
+            - StripPrefix=0
+        - id: delivery-invoice-service-extra
+          uri: lb://delivery-invoice-service
+          predicates:
+            - Path=/api/threewaymatch/**,/api/disputes/**
+          filters:
+            - StripPrefix=0
+        - id: auth-admin-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/admin/**
           filters:
             - StripPrefix=0
       globalcors:

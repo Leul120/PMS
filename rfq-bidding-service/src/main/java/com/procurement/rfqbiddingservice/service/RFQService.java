@@ -5,10 +5,15 @@ import com.procurement.rfqbiddingservice.entity.Bid;
 import com.procurement.rfqbiddingservice.entity.RFQ;
 import com.procurement.rfqbiddingservice.event.BidSubmittedEvent;
 import com.procurement.rfqbiddingservice.event.RFQPublishedEvent;
+import com.procurement.rfqbiddingservice.infrastructure.client.CategoryClient;
+import com.procurement.rfqbiddingservice.infrastructure.client.VendorClient;
 import com.procurement.rfqbiddingservice.repository.BidRepository;
 import com.procurement.rfqbiddingservice.repository.RFQRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +33,8 @@ public class RFQService {
     private final RFQRepository rfqRepository;
     private final BidRepository bidRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final VendorClient vendorClient;
+    private final CategoryClient categoryClient;
     
     @Transactional
     public RFQResponse createRFQ(RFQRequest request, Long userId) {
@@ -54,26 +62,50 @@ public class RFQService {
         
         kafkaTemplate.send("rfq.published", event);
         log.info("RFQ created and published: {}", savedRFQ.getRfqId());
-        
-        return mapToRFQResponse(savedRFQ);
+
+        return mapToRFQResponse(savedRFQ, 0); // newly created — no bids yet
     }
     
-    public List<RFQResponse> getAllRFQs() {
-        return rfqRepository.findAll().stream()
-            .map(this::mapToRFQResponse)
+    public PagedResponse<RFQResponse> getAllRFQs(int page, int size) {
+        Page<RFQ> rfqPage = rfqRepository.findAll(
+            PageRequest.of(page, size, Sort.unsorted()));
+        List<RFQ> rfqs = rfqPage.getContent();
+        Map<Long, Integer> bidCounts = getBidCountMap(rfqs);
+        List<RFQResponse> content = rfqs.stream()
+            .map(rfq -> mapToRFQResponse(rfq, bidCounts.getOrDefault(rfq.getRfqId(), 0)))
             .collect(Collectors.toList());
+        return PagedResponse.<RFQResponse>builder()
+            .content(content).page(rfqPage.getNumber()).size(rfqPage.getSize())
+            .totalElements(rfqPage.getTotalElements()).totalPages(rfqPage.getTotalPages())
+            .last(rfqPage.isLast()).build();
     }
-    
+
     public List<RFQResponse> getRFQsByStatus(String status) {
-        return rfqRepository.findByStatus(status).stream()
-            .map(this::mapToRFQResponse)
+        List<RFQ> rfqs = rfqRepository.findByStatus(status);
+        Map<Long, Integer> bidCounts = getBidCountMap(rfqs);
+        return rfqs.stream()
+            .map(rfq -> mapToRFQResponse(rfq, bidCounts.getOrDefault(rfq.getRfqId(), 0)))
             .collect(Collectors.toList());
     }
-    
+
     public RFQResponse getRFQ(Long rfqId) {
         RFQ rfq = rfqRepository.findById(rfqId)
             .orElseThrow(() -> new RuntimeException("RFQ not found"));
-        return mapToRFQResponse(rfq);
+        int bidCount = bidRepository.findByRfqId(rfqId).size();
+        return mapToRFQResponse(rfq, bidCount);
+    }
+
+    /** Single query to get bid counts for all RFQs — eliminates N+1. */
+    private Map<Long, Integer> getBidCountMap(List<RFQ> rfqs) {
+        if (rfqs.isEmpty()) return Map.of();
+        List<Long> rfqIds = rfqs.stream().map(RFQ::getRfqId).collect(Collectors.toList());
+        Map<Long, Integer> counts = new java.util.HashMap<>();
+        bidRepository.countBidsByRfqIds(rfqIds).forEach(row -> {
+            Long id = ((Number) row.get("rfqId")).longValue();
+            Integer count = ((Number) row.get("bidCount")).intValue();
+            counts.put(id, count);
+        });
+        return counts;
     }
     
     @Transactional
@@ -94,31 +126,34 @@ public class RFQService {
         
         RFQ updatedRFQ = rfqRepository.save(rfq);
         log.info("RFQ updated: {}", rfqId);
-        
-        return mapToRFQResponse(updatedRFQ);
+
+        int bidCount = bidRepository.findByRfqId(rfqId).size();
+        return mapToRFQResponse(updatedRFQ, bidCount);
     }
-    
+
     @Transactional
     public RFQResponse closeRFQ(Long rfqId) {
         RFQ rfq = rfqRepository.findById(rfqId)
             .orElseThrow(() -> new RuntimeException("RFQ not found"));
-        
+
         rfq.setStatus("Closed");
         RFQ closedRFQ = rfqRepository.save(rfq);
         log.info("RFQ closed: {}", rfqId);
-        
-        return mapToRFQResponse(closedRFQ);
+
+        int bidCount = bidRepository.findByRfqId(rfqId).size();
+        return mapToRFQResponse(closedRFQ, bidCount);
     }
     
     @Transactional
     public BidResponse submitBid(BidRequest request) {
-        RFQ rfq = rfqRepository.findById(request.getRfqId())
+        // Pessimistic lock prevents accepting bids on a concurrently-closing RFQ
+        RFQ rfq = rfqRepository.findByIdForUpdate(request.getRfqId())
             .orElseThrow(() -> new RuntimeException("RFQ not found"));
-        
+
         if (!"Open".equals(rfq.getStatus())) {
             throw new RuntimeException("RFQ is not open for bidding");
         }
-        
+
         if (LocalDateTime.now().isAfter(rfq.getDeadline())) {
             throw new RuntimeException("RFQ deadline has passed");
         }
@@ -216,6 +251,26 @@ public class RFQService {
             .map(this::mapToBidResponse)
             .collect(Collectors.toList());
     }
+
+    @Transactional
+    public BidResponse awardBid(Long bidId) {
+        Bid bid = bidRepository.findById(bidId)
+            .orElseThrow(() -> new RuntimeException("Bid not found"));
+
+        bid.setStatus("Awarded");
+        Bid awardedBid = bidRepository.save(bid);
+
+        rfqRepository.findById(bid.getRfqId()).ifPresent(rfq -> {
+            rfq.setStatus("Awarded");
+            rfqRepository.save(rfq);
+        });
+
+        // Single bulk UPDATE instead of N individual saves
+        bidRepository.rejectOtherBids(bid.getRfqId(), bidId);
+
+        log.info("Bid awarded: {} for RFQ: {}", bidId, bid.getRfqId());
+        return mapToBidResponse(awardedBid);
+    }
     
     @Transactional
     public void checkAndCloseExpiredRFQs() {
@@ -228,9 +283,13 @@ public class RFQService {
         }
     }
     
-    private RFQResponse mapToRFQResponse(RFQ rfq) {
+    private RFQResponse mapToRFQResponse(RFQ rfq, int bidCount) {
+        String rfqNumber = "RFQ-" + String.format("%06d", rfq.getRfqId());
+        String categoryName = categoryClient.getCategoryName(rfq.getCategoryId());
         return RFQResponse.builder()
             .rfqId(rfq.getRfqId())
+            .id(rfq.getRfqId())
+            .rfqNumber(rfqNumber)
             .title(rfq.getTitle())
             .description(rfq.getDescription())
             .deadline(rfq.getDeadline())
@@ -238,23 +297,36 @@ public class RFQService {
             .createdBy(rfq.getCreatedBy())
             .createdAt(rfq.getCreatedAt())
             .estimatedValue(rfq.getEstimatedValue())
+            .maxBudget(rfq.getEstimatedValue())
             .categoryId(rfq.getCategoryId())
+            .categoryName(categoryName)
+            .category(categoryName)
             .expectedQuantity(rfq.getExpectedQuantity())
+            .bidCount(bidCount)
             .build();
     }
     
     private BidResponse mapToBidResponse(Bid bid) {
+        String deliveryTime = bid.getDeliveryDays() != null ? bid.getDeliveryDays() + " days" : null;
+        int scoreInt = bid.getTotalScore() != null ? bid.getTotalScore().intValue() : 0;
+        String vendorName = vendorClient.getVendorName(bid.getVendorId());
         return BidResponse.builder()
             .bidId(bid.getBidId())
+            .id(bid.getBidId())
             .rfqId(bid.getRfqId())
             .vendorId(bid.getVendorId())
+            .vendorName(vendorName)
             .bidAmount(bid.getBidAmount())
             .status(bid.getStatus())
             .submittedAt(bid.getSubmittedAt())
             .proposalText(bid.getProposalText())
             .deliveryDays(bid.getDeliveryDays())
+            .deliveryTime(deliveryTime)
             .qualityScore(bid.getQualityScore())
             .totalScore(bid.getTotalScore())
+            .score(scoreInt)
             .build();
     }
 }
+
+

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sidebar Role Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .role-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; }
+        .nav-item { padding: 8px 12px; margin: 4px 0; border-radius: 4px; }
+        .allowed { background-color: #d4edda; color: #155724; }
+        .denied { background-color: #f8d7da; color: #721c24; }
+        .current-role { font-weight: bold; color: #0066cc; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Sidebar Role-Based Access Control Test</h1>
+    
+    <div class="role-section">
+        <h2>Current User Role: <span id="current-role" class="current-role">Not detected</span></h2>
+        <p>This test simulates the sidebar filtering logic for each role.</p>
+    </div>
+
+    <div class="role-section">
+        <h3>Navigation Items by Role</h3>
+        <table id="role-matrix">
+            <thead>
+                <tr>
+                    <th>Navigation Item</th>
+                    <th>Allowed Roles</th>
+                    <th>ADMIN</th>
+                    <th>OFFICER</th>
+                    <th>MANAGER</th>
+                    <th>AUDITOR</th>
+                    <th>VENDOR</th>
+                </tr>
+            </thead>
+            <tbody id="role-matrix-body">
+            </tbody>
+        </table>
+    </div>
+
+    <div class="role-section">
+        <h3>Test Different Roles</h3>
+        <button onclick="testRole('ADMIN')">Test as ADMIN</button>
+        <button onclick="testRole('OFFICER')">Test as OFFICER</button>
+        <button onclick="testRole('MANAGER')">Test as MANAGER</button>
+        <button onclick="testRole('AUDITOR')">Test as AUDITOR</button>
+        <button onclick="testRole('VENDOR')">Test as VENDOR</button>
+        <button onclick="testRole(null)">Test as UNAUTHENTICATED</button>
+    </div>
+
+    <div class="role-section">
+        <h3>Current Role Navigation</h3>
+        <div id="current-navigation"></div>
+    </div>
+
+    <script>
+        // Navigation configuration from sidebar.tsx
+        const navigation = [
+            { name: "Dashboard", href: "/", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "Dashboard (Vendor)", href: "/dashboard/vendor", allowedRoles: ["VENDOR"] },
+            { name: "Vendors", href: "/vendors", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "Requisitions", href: "/requisitions", allowedRoles: ["ADMIN", "OFFICER", "MANAGER"] },
+            { name: "Procurement", href: "/procurement", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "RFQ & Bidding", href: "/rfq", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Purchase Orders", href: "/orders", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Deliveries", href: "/deliveries", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Inventory", href: "/inventory", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "Analytics", href: "/analytics", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "Admin", href: "/dashboard/admin", allowedRoles: ["ADMIN"] },
+            { name: "Team", href: "/users", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"] },
+            { name: "Notifications", href: "/notifications", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Invoices", href: "/invoices", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Performance", href: "/vendors/performance", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+            { name: "Settings", href: "/settings", allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"] },
+        ];
+
+        const allRoles = ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"];
+
+        function initializeRoleMatrix() {
+            const tbody = document.getElementById('role-matrix-body');
+            tbody.innerHTML = '';
+
+            navigation.forEach(item => {
+                const row = document.createElement('tr');
+                
+                // Item name and allowed roles
+                const nameCell = document.createElement('td');
+                nameCell.innerHTML = `<strong>${item.name}</strong><br><small>${item.href}</small>`;
+                row.appendChild(nameCell);
+
+                const allowedCell = document.createElement('td');
+                allowedCell.textContent = item.allowedRoles.join(', ');
+                row.appendChild(allowedCell);
+
+                // Check access for each role
+                allRoles.forEach(role => {
+                    const cell = document.createElement('td');
+                    const hasAccess = item.allowedRoles.includes(role);
+                    cell.className = hasAccess ? 'allowed' : 'denied';
+                    cell.textContent = hasAccess ? '✓' : '✗';
+                    row.appendChild(cell);
+                });
+
+                tbody.appendChild(row);
+            });
+        }
+
+        function testRole(role) {
+            document.getElementById('current-role').textContent = role || 'UNAUTHENTICATED';
+            
+            // Simulate sidebar filtering logic
+            const allowedNavigation = navigation.filter(item =>
+                item.allowedRoles.includes(role)
+            );
+
+            const navDiv = document.getElementById('current-navigation');
+            navDiv.innerHTML = '';
+
+            if (allowedNavigation.length === 0) {
+                navDiv.innerHTML = '<p style="color: red;">No navigation items available for this role</p>';
+                return;
+            }
+
+            allowedNavigation.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'nav-item allowed';
+                div.innerHTML = `<strong>${item.name}</strong> - ${item.href}`;
+                navDiv.appendChild(div);
+            });
+
+            // Show denied items
+            const deniedNavigation = navigation.filter(item =>
+                !item.allowedRoles.includes(role)
+            );
+
+            if (deniedNavigation.length > 0) {
+                const deniedHeader = document.createElement('h4');
+                deniedHeader.textContent = 'Hidden Items:';
+                navDiv.appendChild(deniedHeader);
+
+                deniedNavigation.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'nav-item denied';
+                    div.innerHTML = `<strong>${item.name}</strong> - ${item.href}`;
+                    navDiv.appendChild(div);
+                });
+            }
+        }
+
+        // Check current auth state
+        function checkCurrentAuth() {
+            const stored = localStorage.getItem('auth-storage');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const state = parsed.state;
+                if (state.user && (state.user.role || state.user.roleName)) {
+                    const currentRole = state.user.role || state.user.roleName;
+                    testRole(currentRole);
+                    return;
+                }
+            }
+            testRole(null); // No authenticated user
+        }
+
+        // Initialize
+        initializeRoleMatrix();
+        checkCurrentAuth();
+    </script>
+</body>
+</html>

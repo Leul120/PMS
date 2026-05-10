@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 @RestController
 @RequestMapping("/api/procurement/requisitions")
 @RequiredArgsConstructor
@@ -18,7 +17,7 @@ public class RequisitionController {
     private final RequisitionService requisitionService;
     
     @PostMapping
-    @PreAuthorize("hasAnyRole('PROCUREMENT_OFFICER', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER')")
     public ResponseEntity<RequisitionResponse> createRequisition(
             @Valid @RequestBody RequisitionRequest request,
             @RequestHeader("X-User-Id") Long userId) {
@@ -26,9 +25,11 @@ public class RequisitionController {
     }
     
     @GetMapping
-    @PreAuthorize("hasAnyRole('PROCUREMENT_OFFICER', 'MANAGER', 'ADMIN')")
-    public ResponseEntity<List<RequisitionResponse>> getAllRequisitions() {
-        return ResponseEntity.ok(requisitionService.getAllRequisitions());
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
+    public ResponseEntity<PagedResponse<RequisitionResponse>> getAllRequisitions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(requisitionService.getAllRequisitions(page, size));
     }
     
     @GetMapping("/{requisitionId}")
@@ -43,7 +44,7 @@ public class RequisitionController {
     }
     
     @GetMapping("/status/{status}")
-    @PreAuthorize("hasAnyRole('PROCUREMENT_OFFICER', 'MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<List<RequisitionResponse>> getRequisitionsByStatus(@PathVariable String status) {
         return ResponseEntity.ok(requisitionService.getRequisitionsByStatus(status));
     }
@@ -54,7 +55,7 @@ public class RequisitionController {
             @PathVariable Long requisitionId,
             @Valid @RequestBody ApprovalRequest request,
             @RequestHeader("X-User-Id") Long userId,
-            @RequestHeader("X-User-Role") String userRole) {
+            @RequestHeader(value = "X-User-Role", required = false, defaultValue = "MANAGER") String userRole) {
         return ResponseEntity.ok(requisitionService.approveRequisition(requisitionId, request, userId, userRole));
     }
 }

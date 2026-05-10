@@ -38,7 +38,7 @@ public class AuditLogService {
         log.info("Audit log created: {} on {} by user {}", actionType, entityAffected, userId);
     }
 
-    @Cacheable(value = "auditLogs", key = "'all'")
+    @Cacheable(value = "auditLogs", key = "'all'", sync = true)
     @Transactional(readOnly = true)
     public List<AuditLogResponse> getAllAuditLogs() {
         return auditLogRepository.findTop100ByOrderByTimestampDesc()
@@ -47,7 +47,7 @@ public class AuditLogService {
             .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "auditLogs", key = AuthCacheNames.AUDIT_LOGS + ":user:#userId")
+    @Cacheable(value = "auditLogs", key = AuthCacheNames.AUDIT_LOGS + ":user:#userId", sync = true)
     @Transactional(readOnly = true)
     public List<AuditLogResponse> getAuditLogsByUser(Long userId) {
         return auditLogRepository.findByUserIdOrderByTimestampDesc(userId)

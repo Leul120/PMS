@@ -12,20 +12,20 @@ interface DashboardData {
 export async function fetchDashboardStats() {
   try {
     const [rfqs, pos, vendors, dashboard] = await Promise.all([
-      rfqApi.getAll() as Promise<any[]>,
-      poApi.getAll() as Promise<any[]>,
-      vendorApi.getAll() as Promise<any[]>,
+      rfqApi.getAllList().catch(() => []),
+      poApi.getAllList().catch(() => []),
+      vendorApi.getAllList().catch(() => []),
       analyticsApi.getDashboard().catch((): DashboardData | null => null),
     ]);
 
-    const pendingApprovals = pos.filter((po) => po.status === "PENDING");
+    const pendingApprovals = pos.filter((po: any) => po.status === "PENDING");
     const dash: DashboardData = dashboard || {};
 
     return {
       totalRFQs: dash.totalRFQs ?? rfqs.length,
-      openRFQs: dash.openRFQs ?? rfqs.filter((r) => r.status === "OPEN").length,
+      openRFQs: dash.openRFQs ?? rfqs.filter((r: any) => r.status === "OPEN").length,
       totalPOs: dash.totalPOs ?? pos.length,
-      pendingApprovals: pendingApprovals,
+      pendingApprovals,
       pendingCount: (dash.pendingApprovals?.length ?? pendingApprovals.length) || 0,
       vendorCount: dash.vendorCount ?? vendors.length,
       rfqs,
