@@ -28,59 +28,21 @@ interface AuthState {
 }
 
 export type Permission =
-  // Vendor Management
-  | "vendors:read"
-  | "vendors:create"
-  | "vendors:update"
-  | "vendors:verify"
-  | "vendors:delete"
-  // RFQ & Bidding
-  | "rfq:read"
-  | "rfq:create"
-  | "rfq:update"
-  | "rfq:close"
-  | "rfq:cancel"
-  | "bids:read"
-  | "bids:submit"
-  | "bids:evaluate"
-  // Purchase Orders
-  | "po:read"
-  | "po:create"
-  | "po:approve"
-  | "po:reject"
-  // Requisitions
-  | "requisitions:create"
-  | "requisitions:approve"
-  // Deliveries & Invoices
-  | "deliveries:read"
-  | "deliveries:update"
-  | "invoices:read"
-  | "invoices:create"
-  | "invoices:dispute"
-  | "three-way-match:validate"
-  // Vendor Scoring
-  | "scoring:read"
-  | "scoring:calculate"
-  // Inventory
-  | "inventory:read"
-  | "inventory:update"
-  // User Management
-  | "users:read"
-  | "users:create"
-  | "users:update"
-  | "users:delete"
-  // Analytics & Reports
-  | "analytics:read"
-  | "reports:view"
-  // Audit & Compliance
-  | "audit:read"
-  | "compliance:view"
-  // Settings
-  | "settings:read"
-  | "settings:update";
+  | "vendors:read" | "vendors:create" | "vendors:update" | "vendors:verify" | "vendors:delete"
+  | "rfq:read" | "rfq:create" | "rfq:update" | "rfq:close" | "rfq:cancel"
+  | "bids:read" | "bids:submit" | "bids:evaluate"
+  | "po:read" | "po:create" | "po:approve" | "po:reject"
+  | "requisitions:create" | "requisitions:approve"
+  | "deliveries:read" | "deliveries:update"
+  | "invoices:read" | "invoices:create" | "invoices:dispute" | "three-way-match:validate"
+  | "scoring:read" | "scoring:calculate"
+  | "inventory:read" | "inventory:update"
+  | "users:read" | "users:create" | "users:update" | "users:delete"
+  | "analytics:read" | "reports:view"
+  | "audit:read" | "compliance:view"
+  | "settings:read" | "settings:update";
 
 const rolePermissions: Record<UserRole, Permission[]> = {
-  // ADMIN: Full system access
   ADMIN: [
     "vendors:read", "vendors:create", "vendors:update", "vendors:verify", "vendors:delete",
     "rfq:read", "rfq:create", "rfq:update", "rfq:close", "rfq:cancel",
@@ -96,7 +58,6 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "audit:read", "compliance:view",
     "settings:read", "settings:update",
   ],
-  // OFFICER: Create RFQ, evaluate bids, manage vendors, create POs, validate invoices, trigger scoring
   OFFICER: [
     "vendors:read", "vendors:create", "vendors:update", "vendors:verify",
     "rfq:read", "rfq:create", "rfq:update", "rfq:close", "rfq:cancel",
@@ -110,7 +71,6 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "analytics:read", "reports:view",
     "users:read",
   ],
-  // MANAGER: Approve POs and requisitions, view reports, view vendor scores — cannot create POs or verify vendors
   MANAGER: [
     "vendors:read",
     "rfq:read",
@@ -123,7 +83,6 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "analytics:read", "reports:view",
     "users:read",
   ],
-  // AUDITOR: Read-only access to all transactions, audit logs, compliance reports
   AUDITOR: [
     "vendors:read",
     "rfq:read",
@@ -136,7 +95,6 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "audit:read", "compliance:view",
     "analytics:read", "reports:view",
   ],
-  // VENDOR: Submit bids, submit invoices, record deliveries, view own score
   VENDOR: [
     "vendors:read",
     "rfq:read",
@@ -148,61 +106,43 @@ const rolePermissions: Record<UserRole, Permission[]> = {
   ],
 };
 
+function isValidJwt(token: string): boolean {
+  const parts = token.split('.');
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
-      setAuth: (user, token) => {
-        set({ user, token, isAuthenticated: true });
-      },
-      logout: () => {
-        set({ user: null, token: null, isAuthenticated: false });
-      },
+      setAuth: (user, token) => set({ user, token, isAuthenticated: true }),
+      logout: () => set({ user: null, token: null, isAuthenticated: false }),
       hasRole: (roles) => {
         const { user } = get();
         if (!user) return false;
         const userRole = user.role || user.roleName;
-        if (!userRole) return false;
-        return roles.includes(userRole);
+        return !!userRole && roles.includes(userRole);
       },
       hasPermission: (permission) => {
         const { user } = get();
         if (!user) return false;
         const userRole = user.role || user.roleName;
         if (!userRole) return false;
-        const permissions = rolePermissions[userRole] || [];
-        return permissions.includes(permission);
+        return (rolePermissions[userRole] || []).includes(permission);
       },
     }),
     {
       name: "auth-storage",
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // Validate JWT token format
-          if (state.token) {
-            const parts = state.token.split('.');
-            if (parts.length !== 3) {
-              console.error('Invalid JWT token format in storage - clearing auth');
-              state.user = null;
-              state.token = null;
-              state.isAuthenticated = false;
-              return;
-            }
-            
-            // Check each part is not empty
-            for (const part of parts) {
-              if (!part || part.length === 0) {
-                console.error('Invalid JWT token structure in storage - clearing auth');
-                state.user = null;
-                state.token = null;
-                state.isAuthenticated = false;
-                return;
-              }
-            }
+          if (state.token && !isValidJwt(state.token)) {
+            state.user = null;
+            state.token = null;
+            state.isAuthenticated = false;
+            return;
           }
-          
           state.isAuthenticated = !!(state.user && state.token);
         }
       },
@@ -225,29 +165,16 @@ export function getStoredAuth(): { user: User | null; token: string | null } {
   }
 }
 
-// Function to validate and clean up authentication state
 export function validateAndCleanAuth() {
   if (typeof window === "undefined") return;
-  
   try {
-    const stored = localStorage.getItem("auth-storage");
-    if (!stored) return;
-    
-    const parsed = JSON.parse(stored);
-    const state = parsed?.state;
-    
-    if (state?.token) {
-      const parts = state.token.split('.');
-      if (parts.length !== 3 || parts.some((part: string) => !part || part.length === 0)) {
-        console.error('Invalid JWT token found - clearing authentication');
-        localStorage.removeItem("auth-storage");
-        sessionStorage.removeItem("sessionActive");
-        window.location.href = "/login";
-        return;
-      }
+    const { token } = getStoredAuth();
+    if (token && !isValidJwt(token)) {
+      localStorage.removeItem("auth-storage");
+      sessionStorage.removeItem("sessionActive");
+      window.location.href = "/login";
     }
-  } catch (error) {
-    console.error('Error validating auth state:', error);
+  } catch {
     localStorage.removeItem("auth-storage");
     sessionStorage.removeItem("sessionActive");
     window.location.href = "/login";

@@ -10,7 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -66,7 +66,6 @@ public class AuthController {
     }
     
     @PutMapping("/users/{userId}")
-    @PreAuthorize("#userId == authentication.principal or hasRole('ADMIN')")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long userId,
             @RequestBody UpdateUserRequest request) {
@@ -74,26 +73,22 @@ public class AuthController {
     }
     
     @GetMapping("/users")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<List<UserResponse>> listUsers() {
         return ResponseEntity.ok(authService.getAllUsers());
     }
     
     @GetMapping("/audit-logs")
-    @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR')")
     public ResponseEntity<List<AuditLogResponse>> getAuditLogs() {
         return ResponseEntity.ok(auditLogService.getAllAuditLogs());
     }
     
     @PostMapping("/users/{userId}/unlock")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> unlockAccount(@PathVariable Long userId) {
         return ResponseEntity.ok(authService.unlockAccount(userId));
     }
     
     // Admin user management endpoints
     @PostMapping("/admin/users")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> createUser(
             @Valid @RequestBody CreateUserRequest request,
             @AuthenticationPrincipal Long adminId) {
@@ -101,7 +96,6 @@ public class AuthController {
     }
     
     @PutMapping("/admin/users/{userId}/role")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> assignRole(
             @PathVariable Long userId,
             @RequestBody Map<String, String> request) {
@@ -109,13 +103,11 @@ public class AuthController {
     }
     
     @PostMapping("/admin/users/{userId}/lock")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserResponse> lockAccount(@PathVariable Long userId) {
         return ResponseEntity.ok(authService.lockAccount(userId));
     }
     
     @PostMapping("/admin/users/{userId}/reset-password")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> resetPassword(
             @PathVariable Long userId,
             @RequestBody Map<String, String> request) {
@@ -130,7 +122,6 @@ public class AuthController {
     }
     
     @PutMapping("/settings")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> updateSettings(@RequestBody Map<String, Object> settings) {
         return ResponseEntity.ok(authService.updateSettings(settings));
     }
@@ -151,7 +142,6 @@ public class AuthController {
     }
     
     @PutMapping("/settings/security")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> updateSecuritySettings(@RequestBody Map<String, Object> settings) {
         return ResponseEntity.ok(authService.updateSecuritySettings(settings));
     }

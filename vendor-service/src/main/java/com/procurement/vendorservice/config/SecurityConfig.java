@@ -3,7 +3,7 @@ package com.procurement.vendorservice.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -18,7 +18,6 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -32,7 +31,32 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                .anyRequest().permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Vendor registration
+                .requestMatchers(HttpMethod.POST, "/api/vendors/register").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                // Vendor list
+                .requestMatchers(HttpMethod.GET, "/api/vendors").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                // Vendor by status
+                .requestMatchers(HttpMethod.GET, "/api/vendors/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                // Categories
+                .requestMatchers(HttpMethod.GET, "/api/vendors/categories/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.POST, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER")
+                // Documents
+                .requestMatchers(HttpMethod.GET, "/api/vendors/documents/expiring").hasAnyRole("ADMIN", "OFFICER", "MANAGER")
+                .requestMatchers(HttpMethod.DELETE, "/api/vendors/documents/**").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // Vendor verify
+                .requestMatchers(HttpMethod.POST, "/api/vendors/*/verify").hasAnyRole("ADMIN", "OFFICER")
+                // Vendor status update
+                .requestMatchers(HttpMethod.PUT, "/api/vendors/*/status").hasAnyRole("ADMIN", "OFFICER")
+                // Vendor by user
+                .requestMatchers(HttpMethod.GET, "/api/vendors/user/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // Single vendor get / update
+                .requestMatchers(HttpMethod.GET, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.PUT, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -53,4 +77,3 @@ public class SecurityConfig {
         return source;
     }
 }
-

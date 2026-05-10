@@ -242,7 +242,7 @@ services:
       - VENDOR_SERVICE_URL=http://vendor-service:8082
       - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
       - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
-      - DELIVERY_SERVICE_URL=http://delivery-invoice-service:8085
+      - DELIVERY_INVOICE_SERVICE_URL=http://delivery-invoice-service:8085
       - SCORING_SERVICE_URL=http://scoring-service:8086
       - ANALYTICS_SERVICE_URL=http://analytics-service:8087
       - INVENTORY_SERVICE_URL=http://inventory-service:8088
@@ -308,6 +308,7 @@ services:
       - REDIS_HOST=redis-vendor
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       postgres-vendor:
         condition: service_started
@@ -336,6 +337,7 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
       - VENDOR_SERVICE_URL=http://vendor-service:8082
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       postgres-rfq:
         condition: service_started
@@ -366,6 +368,7 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
       - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       postgres-procurement:
         condition: service_started
@@ -396,6 +399,7 @@ services:
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
       - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       postgres-delivery:
         condition: service_started
@@ -425,6 +429,7 @@ services:
       - REDIS_HOST=redis-scoring
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       postgres-scoring:
         condition: service_started
@@ -466,6 +471,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=secret
       - AUTH_SERVICE_URL=http://auth-service:8081
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       - postgres-inventory
       - auth-service
@@ -486,7 +492,8 @@ services:
       - VENDOR_SERVICE_URL=http://vendor-service:8082
       - PROCUREMENT_SERVICE_URL=http://procurement-service:8084
       - SCORING_SERVICE_URL=http://scoring-service:8086
-      - DELIVERY_SERVICE_URL=http://delivery-invoice-service:8085
+      - DELIVERY_INVOICE_SERVICE_URL=http://delivery-invoice-service:8085
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
       - redis-analytics
       - auth-service
@@ -527,6 +534,7 @@ services:
       - REDIS_HOST=redis-notification
       - REDIS_PORT=6379
       - NOTIFICATION_SERVICE_URL=http://notification-service:8089
+      - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USERNAME=${SMTP_USERNAME:-}

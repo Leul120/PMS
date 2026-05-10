@@ -6,7 +6,6 @@ import com.procurement.analyticsservice.infrastructure.client.VendorClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -27,7 +26,6 @@ public class AnalyticsController {
     // ── Spend Report ──────────────────────────────────────────────────────────
 
     @GetMapping("/reports/spend")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public Mono<ResponseEntity<Map<String, Object>>> getSpendReport() {
         return procurementClient.getPurchaseOrders().map(purchaseOrders -> {
             double totalSpend = purchaseOrders.stream()
@@ -76,7 +74,6 @@ public class AnalyticsController {
     // ── Vendor Comparison ─────────────────────────────────────────────────────
 
     @GetMapping("/reports/vendor-comparison")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public Mono<ResponseEntity<Map<String, Object>>> getVendorComparison(
             @RequestParam List<Long> vendorIds) {
         return Mono.zip(vendorClient.getVendors(), procurementClient.getPurchaseOrders())
@@ -133,7 +130,6 @@ public class AnalyticsController {
     // ── Compliance Report ─────────────────────────────────────────────────────
 
     @GetMapping("/reports/compliance")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public Mono<ResponseEntity<Map<String, Object>>> getComplianceReport() {
         return vendorClient.getVendors().map(vendors -> {
             long total = vendors.size();
@@ -180,7 +176,6 @@ public class AnalyticsController {
     // ── Dashboard Overview ────────────────────────────────────────────────────
 
     @GetMapping("/dashboard/overview")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public Mono<ResponseEntity<Map<String, Object>>> getDashboardOverview() {
         return Mono.zip(
             vendorClient.getVendors(),
@@ -233,7 +228,6 @@ public class AnalyticsController {
     // ── Activity Feed ─────────────────────────────────────────────────────────
 
     @GetMapping("/analytics/activity")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public Mono<ResponseEntity<Map<String, Object>>> getActivity(@RequestParam Long userId) {
         return Mono.zip(
             rfqClient.getRFQs(),

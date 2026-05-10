@@ -96,7 +96,6 @@ spring:
               - Authorization
               - Content-Type
               - X-User-Id
-              - X-User-Role
             maxAge: 3600
 
 logging:

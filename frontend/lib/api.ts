@@ -39,24 +39,26 @@ function getStoredState(): { token: string | null; user: any | null } {
 function getToken(): string | null {
   const token = getStoredState().token;
   if (!token) return null;
-  
-  // Validate JWT token format (must have exactly 2 periods)
+
   const parts = token.split('.');
-  if (parts.length !== 3) {
+  if (parts.length !== 3 || parts.some((p) => !p)) {
     console.error('Invalid JWT token format - clearing authentication');
     handleAuthError();
     return null;
   }
-  
-  // Basic validation of each part (should be base64)
-  for (const part of parts) {
-    if (!part || part.length === 0) {
-      console.error('Invalid JWT token structure - clearing authentication');
+
+  // Check if token is expired
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      console.warn('JWT token expired - clearing authentication');
       handleAuthError();
       return null;
     }
+  } catch {
+    // If we can't decode the payload, let the backend validate
   }
-  
+
   return token;
 }
 
@@ -69,38 +71,9 @@ function getUserId(): string | null {
   return str.trim() !== '' ? str : null;
 }
 
-/** Returns the role string stored in the auth state (e.g. "MANAGER") */
-function getUserRole(): string | null {
-  const user = getStoredState().user;
-  if (!user) return null;
-  const raw = user.role || user.roleName;
-  if (!raw) return null;
-  const str = String(raw).trim();
-  return str !== '' ? str : null;
-}
-
 // ── Auth error handler ────────────────────────────────────────────────────────
 
 function handleAuthError() {
-  console.warn('Authentication error detected - clearing session');
-  if (typeof window !== 'undefined') {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { useAuthStore } = require('@/lib/auth-store');
-      useAuthStore.getState().logout();
-    } catch {
-      localStorage.removeItem('auth-storage');
-    }
-    // Clear any remaining auth data
-    localStorage.removeItem('auth-storage');
-    sessionStorage.removeItem('sessionActive');
-    window.location.href = '/login';
-  }
-}
-
-// Function to manually clear invalid authentication
-export function clearInvalidAuth() {
-  console.warn('Clearing invalid authentication data');
   if (typeof window !== 'undefined') {
     localStorage.removeItem('auth-storage');
     sessionStorage.removeItem('sessionActive');
@@ -127,10 +100,6 @@ async function fetchApi<T>(
   const userId = getUserId();
   if (userId) headers['X-User-Id'] = userId;
 
-  // Send role so backend endpoints that require X-User-Role don't fail
-  const role = getUserRole();
-  if (role) headers['X-User-Role'] = role;
-
   try {
     const response = await fetch(url, { ...options, headers });
 
@@ -140,6 +109,12 @@ async function fetchApi<T>(
     }
 
     if (response.status === 403) {
+      // Try to read the response body for more context
+      const body = await response.text().catch(() => '');
+      const isAuthIssue = body.includes('Access Denied') || body.includes('Forbidden');
+      if (isAuthIssue) {
+        console.warn('403 Forbidden — possible authentication issue, response:', body);
+      }
       throw new Error('You do not have permission to perform this action.');
     }
 

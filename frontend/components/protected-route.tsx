@@ -6,76 +6,49 @@ import { useAuthStore, validateAndCleanAuth } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
 import { Loader2 } from "lucide-react";
 
-const publicRoutes = ["/login", "/register", "/forgot-password"];
-const authRoutes = ["/login", "/register", "/forgot-password"];
+const publicRoutes = ["/login", "/register", "/forgot-password", "/reset-password"];
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const authStore = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [isHydrated, setIsHydrated] = useState(false);
   const isPublicRoute = publicRoutes.includes(pathname);
-  
-  // Read auth state after hydration
-  const isAuthenticated = isHydrated ? authStore.isAuthenticated : false;
-  const user = isHydrated ? authStore.user : null;
 
-  // Wait for Zustand hydration from localStorage
   useEffect(() => {
-    // Check if already hydrated
     if (useAuthStore.persist?.hasHydrated?.()) {
+      validateAndCleanAuth();
       setIsHydrated(true);
       return;
     }
-    
-    // Subscribe to hydration finish
+
     const unsub = useAuthStore.persist?.onFinishHydration?.(() => {
-      setIsHydrated(true);
-      // Validate authentication state after hydration
       validateAndCleanAuth();
+      setIsHydrated(true);
     });
-    
-    // Fallback: check hydration status periodically (max 5 seconds, then assume not hydrated = not logged in)
-    let attempts = 0;
-    const maxAttempts = 50; // 50 * 100ms = 5 seconds
-    const interval = setInterval(() => {
-      attempts++;
-      if (useAuthStore.persist?.hasHydrated?.()) {
-        setIsHydrated(true);
-        validateAndCleanAuth();
-        clearInterval(interval);
-      } else if (attempts >= maxAttempts) {
-        // After timeout, mark as hydrated — if no auth state was loaded, the redirect to /login will fire
-        setIsHydrated(true);
-        clearInterval(interval);
-      }
-    }, 100);
+
+    const timeout = setTimeout(() => setIsHydrated(true), 3000);
 
     return () => {
       unsub?.();
-      clearInterval(interval);
+      clearTimeout(timeout);
     };
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
     if (!isHydrated) return;
 
-      // If not authenticated and trying to access protected route, redirect to login
     if (!isAuthenticated && !isPublicRoute) {
       router.push("/login");
       return;
     }
-    
-    // If authenticated and trying to access login page, redirect to appropriate dashboard
+
     if (isAuthenticated && isPublicRoute) {
       const userRole = user?.role || user?.roleName;
-      const dashboardPath = userRole ? getDashboardByRole(userRole) : "/dashboard";
-      router.push(dashboardPath);
-      return;
+      router.push(userRole ? getDashboardByRole(userRole) : "/dashboard");
     }
   }, [isHydrated, isAuthenticated, isPublicRoute, router, user, pathname]);
 
-  // Show loading state while hydrating or checking auth
   if (!isHydrated || (!isAuthenticated && !isPublicRoute)) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -87,11 +60,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Don't render protected content for public routes (login/register will render themselves)
-  if (isPublicRoute) {
-    return <>{children}</>;
-  }
-
-  // User is authenticated, render the protected content
   return <>{children}</>;
 }

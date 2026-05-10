@@ -7,7 +7,20 @@
       "Bash(Select-Object Name)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\" -Directory)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\dawit\\\\PMS\\\\frontend\" -Recurse -Name)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\" -Recurse -Name)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Get-ChildItem -Directory -Force)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Get-ChildItem -Path C:\\\\Users\\\\dawit\\\\PMS -Filter \".env*\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\\\\frontend\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "PowerShell(Split-Path *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\\\\frontend\\\\app\" -Recurse -File | Where-Object {$_.Extension -eq \".tsx\"} | Select-Object -ExpandProperty Name | Sort-Object | Get-Unique)",
+      "Bash(del *)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }

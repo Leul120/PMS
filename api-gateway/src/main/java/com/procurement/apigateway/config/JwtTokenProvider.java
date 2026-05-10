@@ -16,7 +16,7 @@ public class JwtTokenProvider {
 
     private final SecretKey jwtSecret;
 
-    public JwtTokenProvider(@Value("${jwt.secret:mySecretKey}") String jwtSecretString) {
+    public JwtTokenProvider(@Value("${jwt.secret:procurement-default-secret-key-change-in-production-min32chars}") String jwtSecretString) {
         this.jwtSecret = Keys.hmacShaKeyFor(jwtSecretString.getBytes(StandardCharsets.UTF_8));
     }
 

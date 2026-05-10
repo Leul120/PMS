@@ -7,7 +7,7 @@ import com.procurement.deliveryinvoiceservice.service.DeliveryInvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -22,7 +22,6 @@ public class DeliveryInvoiceController {
     // ── Deliveries ──────────────────────────────────────────────────────────
 
     @PostMapping("/deliveries")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<Delivery> createDelivery(@Valid @RequestBody DeliveryRequest request) {
         return ResponseEntity.ok(service.createDelivery(
                 request.getPoId(),
@@ -35,13 +34,11 @@ public class DeliveryInvoiceController {
     }
 
     @GetMapping("/deliveries/po/{poId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<Delivery>> getDeliveriesByPO(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getDeliveriesByPO(poId));
     }
 
     @GetMapping("/deliveries")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<PagedResponse<Delivery>> getAllDeliveries(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
@@ -51,7 +48,6 @@ public class DeliveryInvoiceController {
     // ── Invoices ─────────────────────────────────────────────────────────────
 
     @PostMapping("/invoices")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<Invoice> submitInvoice(@Valid @RequestBody InvoiceRequest request) {
         return ResponseEntity.ok(service.submitInvoice(
                 request.getPoId(),
@@ -60,13 +56,11 @@ public class DeliveryInvoiceController {
     }
 
     @GetMapping("/invoices/po/{poId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<List<Invoice>> getInvoicesByPO(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getInvoicesByPO(poId));
     }
 
     @GetMapping("/invoices")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<PagedResponse<Invoice>> getAllInvoices(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
@@ -74,7 +68,6 @@ public class DeliveryInvoiceController {
     }
 
     @PostMapping("/invoices/{invoiceId}/validate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<Invoice> validateInvoice(
             @PathVariable Long invoiceId,
             @RequestParam BigDecimal expectedAmount,
@@ -83,7 +76,6 @@ public class DeliveryInvoiceController {
     }
 
     @PostMapping("/invoices/{invoiceId}/dispute")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<Invoice> disputeInvoice(
             @PathVariable Long invoiceId,
             @RequestParam String reason) {
@@ -93,7 +85,6 @@ public class DeliveryInvoiceController {
     // ── 3-Way Match ──────────────────────────────────────────────────────────
 
     @PostMapping("/threewaymatch/validate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER')")
     public ResponseEntity<ThreeWayMatchResponse> performThreeWayMatch(
             @Valid @RequestBody ThreeWayMatchRequest request) {
         return ResponseEntity.ok(service.performThreeWayMatch(
@@ -105,7 +96,6 @@ public class DeliveryInvoiceController {
     }
 
     @GetMapping("/threewaymatch/po/{poId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<ThreeWayMatchResponse> getThreeWayMatch(@PathVariable Long poId) {
         return ResponseEntity.ok(service.getThreeWayMatch(poId));
     }
@@ -113,16 +103,17 @@ public class DeliveryInvoiceController {
     // ── Disputes ─────────────────────────────────────────────────────────────
 
     @PostMapping("/disputes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'VENDOR')")
     public ResponseEntity<DisputeResponse> raiseDispute(
             @Valid @RequestBody DisputeRequest request,
-            @RequestHeader("X-User-Id") Long userId,
-            @RequestHeader(value = "X-User-Role", required = false, defaultValue = "OFFICER") String userRole) {
+            @RequestHeader("X-User-Id") Long userId) {
+        String userRole = SecurityContextHolder.getContext().getAuthentication()
+            .getAuthorities().stream().findFirst()
+            .map(a -> a.getAuthority().replace("ROLE_", ""))
+            .orElse("OFFICER");
         return ResponseEntity.ok(service.raiseDispute(request, userId, userRole));
     }
 
     @GetMapping("/disputes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<PagedResponse<DisputeResponse>> getAllDisputes(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
@@ -130,19 +121,16 @@ public class DeliveryInvoiceController {
     }
 
     @GetMapping("/disputes/{disputeId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR', 'VENDOR')")
     public ResponseEntity<DisputeResponse> getDispute(@PathVariable Long disputeId) {
         return ResponseEntity.ok(service.getDisputeById(disputeId));
     }
 
     @GetMapping("/disputes/status/{status}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER', 'AUDITOR')")
     public ResponseEntity<List<DisputeResponse>> getDisputesByStatus(@PathVariable String status) {
         return ResponseEntity.ok(service.getDisputesByStatus(status));
     }
 
     @PostMapping("/disputes/{disputeId}/resolve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'OFFICER', 'MANAGER')")
     public ResponseEntity<DisputeResponse> resolveDispute(
             @PathVariable Long disputeId,
             @Valid @RequestBody ResolutionRequest request,

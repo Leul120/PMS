@@ -42,7 +42,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                // Store raw token so WebClient can forward it to downstream services
                 TokenHolder.set(jwt);
                 log.debug("Authenticated user: {} with role: {}", email, role);
             }
@@ -53,7 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             chain.doFilter(request, response);
         } finally {
-            TokenHolder.clear(); // always clean up thread-local
+            TokenHolder.clear();
         }
     }
 

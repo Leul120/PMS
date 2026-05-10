@@ -79,12 +79,4 @@ public class JwtTokenProvider {
                 .parseSignedClaims(token)
                 .getPayload();
     }
-
-    /**
-     * Kept for backward compatibility with PublicKeyController.
-     * Returns null since we now use symmetric keys.
-     */
-    public java.security.PublicKey getPublicKey() {
-        return null;
-    }
 }
