@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/require-role";
-import { poApi, rfqApi, analyticsApi } from "@/lib/api";
+import { rfqApi, vendorApi, poApi, getVendorNameMap } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -29,9 +29,11 @@ export default function ManagerDashboardPage() {
     if (!hasRole(["ADMIN", "MANAGER"])) return;
     try {
       setLoading(true);
-      const [pos, rfqs] = await Promise.all([
-        poApi.getAllList().catch(() => []),
+      const [rfqs, vendors, pos, vendorMap] = await Promise.all([
         rfqApi.getAllList().catch(() => []),
+        vendorApi.getAllList().catch(() => []),
+        poApi.getAllList().catch(() => []),
+        getVendorNameMap(),
       ]);
 
       const pending = pos.filter((po: any) => po.status?.toLowerCase().includes("pending"));
@@ -52,7 +54,7 @@ export default function ManagerDashboardPage() {
         pending.slice(0, 10).map((po: any) => ({
           id: String(po.id || po.poId),
           poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-          vendorName: po.vendorName || `Vendor #${po.vendorId}`,
+          vendorName: po.vendorName || vendorMap?.get(String(po.vendorId || "")) || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
           totalAmount: Number(po.totalAmount) || 0,
           status: po.status,
           createdAt: po.createdAt || po.issueDate,

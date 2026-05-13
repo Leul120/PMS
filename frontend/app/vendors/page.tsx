@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { vendorApi, scoringApi } from "@/lib/api";
+import { vendorApi, scoringApi, getCategoryNameMap } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
 import { VendorDocumentDialog } from "./vendor-document-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -112,16 +112,26 @@ export default function VendorsPage() {
   async function loadVendors(page = 0) {
     try {
       setLoading(true);
-      const response = await vendorApi.getAll(page, PAGE_SIZE);
+      const [response, categoryMap] = await Promise.all([
+        vendorApi.getAll(page, PAGE_SIZE),
+        getCategoryNameMap().catch(() => new Map<string, string>()),
+      ]);
       const items = response.content ?? [];
-      const normalised = items.map((v: any) => ({
-        ...v,
-        id: String(v.id || v.vendorId),
-        category: v.category || v.categoryName || "Uncategorized",
-        status: v.status || (v.complianceStatus === "Verified" ? "ACTIVE" : "PENDING"),
-        verified: v.verified ?? (v.complianceStatus === "Verified"),
-        phone: v.phone || v.phoneNumber,
-      }));
+      const normalised = items.map((v: any) => {
+        // Backend returns categoryName already; fall back to map lookup if it's a raw ID
+        const rawCategory = v.category || v.categoryName || "";
+        const category = /^\d+$/.test(String(rawCategory))
+          ? (categoryMap.get(String(rawCategory)) || rawCategory)
+          : (rawCategory || "Uncategorized");
+        return {
+          ...v,
+          id: String(v.id || v.vendorId),
+          category,
+          status: v.status || (v.complianceStatus === "Verified" ? "ACTIVE" : "PENDING"),
+          verified: v.verified ?? (v.complianceStatus === "Verified"),
+          phone: v.phone || v.phoneNumber,
+        };
+      });
       setVendors(normalised);
       setFilteredVendors(normalised);
       setTotalPages(response.totalPages ?? 0);

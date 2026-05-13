@@ -639,6 +639,79 @@ export const disputeApi = {
   getByStatus: (status: string) => fetchApi<any[]>(`/disputes/status/${status}`),
 };
 
+// ── Vendor name lookup cache ──────────────────────────────────────────────────
+
+let _vendorCache: Map<string, string> | null = null;
+let _vendorCachePromise: Promise<Map<string, string>> | null = null;
+
+/** Returns a Map<vendorId, companyName> fetched once per page load.
+ * Subsequent calls return the cached map immediately.
+ */
+export async function getVendorNameMap(): Promise<Map<string, string>> {
+  if (_vendorCache) return _vendorCache;
+  if (_vendorCachePromise) return _vendorCachePromise;
+
+  _vendorCachePromise = vendorApi.getAllList()
+    .then((vendors: any[]) => {
+      const map = new Map<string, string>();
+      vendors.forEach((v: any) => {
+        const id = String(v.vendorId || v.id || '');
+        const name = v.companyName || v.name || v.vendorName || '';
+        if (id && name) map.set(id, name);
+      });
+      _vendorCache = map;
+      return map;
+    })
+    .catch(() => {
+      _vendorCachePromise = null; // allow retry on next call
+      return new Map<string, string>();
+    });
+
+  return _vendorCachePromise;
+}
+
+// ── Category name lookup cache ────────────────────────────────────────────────
+
+let _categoryCache: Map<string, string> | null = null;
+let _categoryCachePromise: Promise<Map<string, string>> | null = null;
+
+/**
+ * Returns a Map<categoryId, categoryName> fetched once per page load.
+ * Used to resolve category IDs to human-readable names on the frontend.
+ */
+export async function getCategoryNameMap(): Promise<Map<string, string>> {
+  if (_categoryCache) return _categoryCache;
+  if (_categoryCachePromise) return _categoryCachePromise;
+
+  _categoryCachePromise = vendorApi.getCategories()
+    .then((categories: any[]) => {
+      const map = new Map<string, string>();
+      categories.forEach((c: any) => {
+        const id = String(c.categoryId || c.id || '');
+        const name = c.categoryName || c.name || '';
+        if (id && name) map.set(id, name);
+      });
+      _categoryCache = map;
+      return map;
+    })
+    .catch(() => {
+      _categoryCachePromise = null;
+      return new Map<string, string>();
+    });
+
+  return _categoryCachePromise;
+}
+
+/** Resolves a vendor name from the cache. Falls back to the provided fallback string. */
+export function resolveVendorName(
+  vendorId: string | number | undefined | null,
+  fallback = 'Unknown Vendor'
+): string {
+  if (!vendorId) return fallback;
+  const id = String(vendorId);
+  return _vendorCache?.get(id) ?? fallback;
+}
+
 // ── Audit Log APIs ────────────────────────────────────────────────────────────
 
 export const auditApi = {

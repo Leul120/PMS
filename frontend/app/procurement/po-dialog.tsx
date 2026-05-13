@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { poApi, rfqApi, vendorApi } from "@/lib/api";
+import { poApi, rfqApi, bidApi, vendorApi, getVendorNameMap } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import {
@@ -43,6 +43,8 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rfqs, setRfqs] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [vendorMap, setVendorMap] = useState<Map<string, string> | null>(null);
+  const [bids, setBids] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
@@ -69,9 +71,10 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
   async function loadDropdownData() {
     try {
       setLoadingData(true);
-      const [rfqData, vendorData] = await Promise.all([
+      const [rfqData, vendorData, vendorNameMap] = await Promise.all([
         rfqApi.getAllList().catch(() => []),
         vendorApi.getAllList().catch(() => []),
+        getVendorNameMap(),
       ]);
       // Only show open RFQs for new POs
       setRfqs(rfqData.filter((r: any) => r.status?.toUpperCase() === "OPEN"));
@@ -79,11 +82,25 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
       setVendors(vendorData.filter((v: any) =>
         v.status === "ACTIVE" || v.verified === true || v.complianceStatus === "Verified"
       ));
+      setVendorMap(vendorNameMap);
     } catch {
       // silently fall back — user can type IDs manually
     } finally {
       setLoadingData(false);
     }
+  }
+
+  // When RFQ selection changes, load its bids so user can pick one by vendor name
+  async function handleRfqChange(rfqId: string) {
+    setFormData((prev) => ({ ...prev, rfqId, bidId: "" }));
+    setBids([]);
+    if (!rfqId) return;
+    try {
+      const bidData = await bidApi.getByRfq(rfqId).catch(() => []);
+      setBids((bidData as any[]).filter((b: any) =>
+        !["REJECTED", "Rejected", "AWARDED", "Awarded"].includes(b.status)
+      ));
+    } catch { /* no bids */ }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -161,7 +178,7 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
             ) : rfqs.length > 0 ? (
               <Select
                 value={formData.rfqId}
-                onValueChange={(v) => setFormData({ ...formData, rfqId: v })}
+                onValueChange={handleRfqChange}
               >
                 <SelectTrigger id="rfqId">
                   <SelectValue placeholder={loadingData ? "Loading..." : "Select an open RFQ"} />
@@ -245,14 +262,29 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
 
           {!isEditing && (
             <div className="space-y-2">
-              <Label htmlFor="bidId">Linked Bid ID (optional)</Label>
-              <Input
-                id="bidId"
-                type="number"
-                value={formData.bidId}
-                onChange={(e) => setFormData({ ...formData, bidId: e.target.value })}
-                placeholder="Leave blank if not from a bid"
-              />
+              <Label htmlFor="bidId">Linked Bid (optional)</Label>
+              {bids.length > 0 ? (
+                <Select
+                  value={formData.bidId}
+                  onValueChange={(v) => setFormData({ ...formData, bidId: v })}
+                >
+                  <SelectTrigger id="bidId">
+                    <SelectValue placeholder="Select a bid (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— None —</SelectItem>
+                    {bids.map((b: any) => (
+                      <SelectItem key={b.bidId || b.id} value={String(b.bidId || b.id)}>
+                        {b.vendorName || vendorMap?.get(String(b.vendorId || "")) || `Vendor #${b.vendorId}`} — {Number(b.bidAmount).toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-gray-400 py-1">
+                  {formData.rfqId ? "No eligible bids for this RFQ." : "Select an RFQ first to see available bids."}
+                </p>
+              )}
             </div>
           )}
 

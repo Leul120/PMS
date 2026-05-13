@@ -2,21 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { rfqApi, bidApi, poApi, deliveryApi, invoiceApi } from "@/lib/api";
+import { rfqApi, bidApi, poApi, deliveryApi, getVendorNameMap } from "@/lib/api";
 import Link from "next/link";
-import { Loader2, Truck, Gavel, Package, FileText, Building2, Receipt, Star } from "lucide-react";
+import { Loader2, Truck, Gavel, Package, Building2, Receipt, Star } from "lucide-react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 
 export default function VendorDashboardPage() {
@@ -28,20 +23,33 @@ export default function VendorDashboardPage() {
 
   useEffect(() => {
     if (!hasRole(["ADMIN", "VENDOR"])) return;
+
     async function load() {
       try {
         setLoading(true);
         const vendorId = user?.id || user?.userId;
-        const [rfqs, orders] = await Promise.all([
+
+        const [rfqs, orders, vendorMap] = await Promise.all([
           rfqApi.getAllList().catch(() => []),
           poApi.getAllList().catch(() => []),
+          getVendorNameMap(),
         ]);
 
-        const openRfqs = rfqs.filter((r: any) => r.status?.toUpperCase() === "OPEN").length;
+        // Build rfqId → title map so the bids table shows the RFQ title, not a raw ID.
+        // RFQ entity: rfqId (Long), title (String)
+        const rfqTitleMap = new Map<string, string>();
+        (rfqs as any[]).forEach((r: any) => {
+          const id = String(r.rfqId || r.id || "");
+          if (id && r.title) rfqTitleMap.set(id, r.title);
+        });
+
+        const openRfqs = rfqs.filter(
+          (r: any) => r.status?.toUpperCase() === "OPEN"
+        ).length;
 
         let myBids: any[] = [];
         if (vendorId) {
-          myBids = await bidApi.getByVendor(vendorId).catch(() => []) as any[];
+          myBids = (await bidApi.getByVendor(vendorId).catch(() => [])) as any[];
         }
 
         let deliveries: any[] = [];
@@ -55,13 +63,30 @@ export default function VendorDashboardPage() {
           myOrders: orders.length,
           deliveries: deliveries.length,
         });
-        setRecentBids((myBids as any[]).slice(0, 5));
+
+        setRecentBids(
+          myBids.slice(0, 5).map((bid: any) => ({
+            ...bid,
+            id: String(bid.bidId || bid.id),
+            vendorName: bid.vendorName || vendorMap?.get(String(bid.vendorId || "")) || (bid.vendorId ? `Vendor #${bid.vendorId}` : "Unknown Vendor"),
+            // Resolve Bid.rfqId (Long) -> RFQ.title (String)
+            rfqTitle:
+              rfqTitleMap.get(String(bid.rfqId || "")) ||
+              (bid.rfqId
+                ? `RFQ-${String(bid.rfqId).padStart(6, "0")}`
+                : "--"),
+            deliveryTime:
+              bid.deliveryTime ||
+              (bid.deliveryDays ? `${bid.deliveryDays} days` : "--"),
+          }))
+        );
       } catch {
-        // silently fail â€â€ show zeros
+        // silently fail — show zeros
       } finally {
         setLoading(false);
       }
     }
+
     load();
   }, [user, hasRole]);
 
@@ -69,10 +94,13 @@ export default function VendorDashboardPage() {
     <RequireRole allowedRoles={["ADMIN", "VENDOR"]}>
       <DashboardLayout>
         <div className="space-y-4">
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Vendor Dashboard</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Submit bids, track orders, and manage your profile</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Submit bids, track orders, and manage your profile
+              </p>
             </div>
             <Button size="sm" className="text-xs h-8" asChild>
               <Link href="/rfq">
@@ -82,6 +110,7 @@ export default function VendorDashboardPage() {
             </Button>
           </div>
 
+          {/* Stats */}
           <div className="grid grid-cols-4 gap-3">
             <Card className="border-0 shadow-sm bg-blue-50">
               <CardContent className="p-3">
@@ -89,7 +118,9 @@ export default function VendorDashboardPage() {
                 <p className="text-xl font-semibold text-blue-700 mt-1">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.openRfqs}
                 </p>
-                <Link href="/rfq" className="text-[10px] text-blue-500 hover:underline">View all â†â€™</Link>
+                <Link href="/rfq" className="text-[10px] text-blue-500 hover:underline">
+                  View all
+                </Link>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-sm bg-emerald-50">
@@ -98,7 +129,9 @@ export default function VendorDashboardPage() {
                 <p className="text-xl font-semibold text-emerald-700 mt-1">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.myBids}
                 </p>
-                <Link href="/rfq" className="text-[10px] text-emerald-500 hover:underline">View bids â†â€™</Link>
+                <Link href="/rfq" className="text-[10px] text-emerald-500 hover:underline">
+                  View bids
+                </Link>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-sm bg-amber-50">
@@ -107,7 +140,9 @@ export default function VendorDashboardPage() {
                 <p className="text-xl font-semibold text-amber-700 mt-1">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.myOrders}
                 </p>
-                <Link href="/orders" className="text-[10px] text-amber-500 hover:underline">View orders â†â€™</Link>
+                <Link href="/orders" className="text-[10px] text-amber-500 hover:underline">
+                  View orders
+                </Link>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-sm bg-gray-50">
@@ -116,12 +151,15 @@ export default function VendorDashboardPage() {
                 <p className="text-xl font-semibold text-gray-700 mt-1">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.deliveries}
                 </p>
-                <Link href="/deliveries" className="text-[10px] text-gray-500 hover:underline">Track â†â€™</Link>
+                <Link href="/deliveries" className="text-[10px] text-gray-500 hover:underline">
+                  Track
+                </Link>
               </CardContent>
             </Card>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
+            {/* Recent Bids */}
             <Card className="col-span-2 border-0 shadow-sm">
               <CardHeader className="py-3 px-4 border-b border-gray-100">
                 <CardTitle className="text-sm font-medium text-gray-700">My Recent Bids</CardTitle>
@@ -130,7 +168,9 @@ export default function VendorDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Bid ID</TableHead>
+                      <TableHead className="text-xs font-medium text-gray-500 py-2">Bid #</TableHead>
+                      {/* RFQ title resolved from Bid.rfqId via rfqTitleMap */}
+                      <TableHead className="text-xs font-medium text-gray-500 py-2">RFQ</TableHead>
                       <TableHead className="text-xs font-medium text-gray-500 py-2">Amount</TableHead>
                       <TableHead className="text-xs font-medium text-gray-500 py-2">Delivery</TableHead>
                       <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
@@ -139,28 +179,40 @@ export default function VendorDashboardPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-6">
+                        <TableCell colSpan={5} className="text-center py-6">
                           <Loader2 className="h-4 w-4 animate-spin mx-auto text-gray-400" />
                         </TableCell>
                       </TableRow>
                     ) : recentBids.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-6 text-gray-500 text-xs">
+                        <TableCell colSpan={5} className="text-center py-6 text-gray-500 text-xs">
                           No bids yet.{" "}
-                          <Link href="/rfq" className="text-primary hover:underline">Browse open RFQs</Link>
+                          <Link href="/rfq" className="text-primary hover:underline">
+                            Browse open RFQs
+                          </Link>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      recentBids.map((bid: any) => (
+                      recentBids.map((bid) => (
                         <TableRow key={bid.id}>
-                          <TableCell className="text-xs font-medium">BID-{String(bid.id).padStart(4, "0")}</TableCell>
-                          <TableCell className="text-xs">${bid.bidAmount?.toLocaleString() || 0}</TableCell>
-                          <TableCell className="text-xs">{bid.deliveryTime || "â€â€"}</TableCell>
-                          <TableCell>
+                          <TableCell className="text-xs font-medium py-2">
+                            BID-{String(bid.id).padStart(4, "0")}
+                          </TableCell>
+                          <TableCell className="text-xs py-2 text-gray-600 max-w-[160px] truncate">
+                            {bid.rfqTitle}
+                          </TableCell>
+                          <TableCell className="text-xs py-2">
+                            ${bid.bidAmount?.toLocaleString() || 0}
+                          </TableCell>
+                          <TableCell className="text-xs py-2">{bid.deliveryTime}</TableCell>
+                          <TableCell className="py-2">
                             <Badge
                               variant={
-                                bid.status?.toUpperCase() === "AWARDED" ? "success" :
-                                bid.status?.toUpperCase() === "SUBMITTED" ? "default" : "secondary"
+                                bid.status?.toUpperCase() === "AWARDED"
+                                  ? "success"
+                                  : bid.status?.toUpperCase() === "SUBMITTED"
+                                  ? "default"
+                                  : "secondary"
                               }
                               className="text-[10px]"
                             >
@@ -175,28 +227,41 @@ export default function VendorDashboardPage() {
               </CardContent>
             </Card>
 
+            {/* Quick Actions */}
             <Card className="border-0 shadow-sm">
               <CardHeader className="py-3 px-4 border-b border-gray-100">
                 <CardTitle className="text-sm font-medium text-gray-700">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="p-3 space-y-2">
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/rfq"><Gavel className="mr-2 h-3.5 w-3.5" />Browse & Bid on RFQs</Link>
+                  <Link href="/rfq">
+                    <Gavel className="mr-2 h-3.5 w-3.5" />Browse &amp; Bid on RFQs
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/orders"><Package className="mr-2 h-3.5 w-3.5" />View Purchase Orders</Link>
+                  <Link href="/orders">
+                    <Package className="mr-2 h-3.5 w-3.5" />View Purchase Orders
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/invoices"><Receipt className="mr-2 h-3.5 w-3.5" />Submit Invoice</Link>
+                  <Link href="/invoices">
+                    <Receipt className="mr-2 h-3.5 w-3.5" />Submit Invoice
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/deliveries"><Truck className="mr-2 h-3.5 w-3.5" />Update Deliveries</Link>
+                  <Link href="/deliveries">
+                    <Truck className="mr-2 h-3.5 w-3.5" />Update Deliveries
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/vendors/performance"><Star className="mr-2 h-3.5 w-3.5" />My Performance Score</Link>
+                  <Link href="/vendors/performance">
+                    <Star className="mr-2 h-3.5 w-3.5" />My Performance Score
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
-                  <Link href="/settings"><Building2 className="mr-2 h-3.5 w-3.5" />Update Profile</Link>
+                  <Link href="/settings">
+                    <Building2 className="mr-2 h-3.5 w-3.5" />Update Profile
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

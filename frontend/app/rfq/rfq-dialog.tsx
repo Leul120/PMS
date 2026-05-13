@@ -7,23 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { rfqApi, requisitionApi } from "@/lib/api";
+import { rfqApi, requisitionApi, vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
-// Common procurement categories
-const CATEGORIES = [
-  { id: 1, name: "IT Equipment" },
-  { id: 2, name: "Office Supplies" },
-  { id: 3, name: "Professional Services" },
-  { id: 4, name: "Construction" },
-  { id: 5, name: "Manufacturing" },
-  { id: 6, name: "Marketing" },
-  { id: 7, name: "Logistics" },
-  { id: 8, name: "Facilities" },
-  { id: 9, name: "Software" },
-  { id: 10, name: "Other" },
-];
+
 
 interface RFQDialogProps {
   open: boolean;
@@ -35,6 +23,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requisitions, setRequisitions] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [selectedReqId, setSelectedReqId] = useState("");
   const [formData, setFormData] = useState({
     title: "",
@@ -45,9 +34,17 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     expectedQuantity: "",
   });
 
-  // Load approved requisitions when dialog opens
+  // Load approved requisitions when dialog opens — only for non-vendor roles
   useEffect(() => {
     if (!open) return;
+    // Load categories from vendor-service
+    vendorApi.getCategories().then((cats: any[]) => {
+      setCategories(cats.map((c: any) => ({ id: c.categoryId, name: c.categoryName })));
+    }).catch(() => {});
+    // VENDORs don't have permission to read requisitions (403) — skip the call
+    const stored = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
+    const role: string = stored ? (JSON.parse(stored)?.state?.user?.role ?? "") : "";
+    if (role === "VENDOR") return;
     requisitionApi.getAll(0, 100).then((res) => {
       const items = (res.content ?? []).filter((r: any) => r.status === "APPROVED");
       setRequisitions(items);
@@ -200,7 +197,13 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((cat) => (
+                  {(categories.length > 0 ? categories : [
+                    { id: 1, name: "IT" },
+                    { id: 2, name: "Construction" },
+                    { id: 3, name: "Stationery" },
+                    { id: 4, name: "Electronics" },
+                    { id: 5, name: "Furniture" },
+                  ]).map((cat) => (
                     <SelectItem key={cat.id} value={cat.id.toString()}>
                       {cat.name}
                     </SelectItem>

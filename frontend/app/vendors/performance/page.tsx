@@ -17,7 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart,
   PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
 } from "recharts";
-import { scoringApi, vendorApi } from "@/lib/api";
+import { scoringApi, getVendorNameMap } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
 import { RequireRole } from "@/components/require-role";
@@ -76,22 +76,15 @@ export default function VendorPerformancePage() {
       setLoading(true);
       let data: any[] = [];
 
-      if (isVendor) {
-        // Vendor sees only their own score
-        const vendorId = user?.id || user?.userId;
-        if (vendorId) {
-          const vendorScores = await scoringApi.getByVendor(vendorId).catch(() => []);
-          data = vendorScores;
-        }
-      } else {
-        // Internal roles see the full ranking
-        data = await scoringApi.getRanking().catch(() => []);
-      }
+      const [data, vendorMap] = await Promise.all([
+        isVendor ? scoringApi.getByVendor(user?.id || user?.userId).catch(() => []) : scoringApi.getRanking().catch(() => []),
+        getVendorNameMap(),
+      ]);
 
       // Enrich with vendor names if missing
       const normalised: VendorScore[] = (data as any[]).map((s: any) => ({
         vendorId: String(s.vendorId || s.id),
-        vendorName: s.vendorName || s.companyName || `Vendor #${s.vendorId}`,
+        vendorName: s.vendorName || s.companyName || vendorMap?.get(String(s.vendorId || s.id || "")) || `Vendor #${s.vendorId}`,
         companyName: s.companyName || s.vendorName,
         overallScore: Math.round(Number(s.overallScore ?? s.finalScore ?? s.score ?? 0)),
         timelinessScore: Math.round(Number(s.timelinessScore ?? 0)),

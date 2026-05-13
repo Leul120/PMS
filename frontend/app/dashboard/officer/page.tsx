@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/require-role";
-import { rfqApi, vendorApi, poApi, bidApi } from "@/lib/api";
+import { rfqApi, vendorApi, poApi, bidApi, getVendorNameMap, getCategoryNameMap } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import Link from "next/link";
 import { Loader2, ClipboardList, Users, ShoppingCart, Gavel, TrendingUp, CheckCircle, Clock } from "lucide-react";
@@ -28,10 +28,12 @@ export default function OfficerDashboardPage() {
     async function load() {
       try {
         setLoading(true);
-        const [rfqs, vendors, pos] = await Promise.all([
+        const [rfqs, vendors, pos, vendorMap, categoryMap] = await Promise.all([
           rfqApi.getAllList().catch(() => []),
           vendorApi.getAllList().catch(() => []),
           poApi.getAllList().catch(() => []),
+          getVendorNameMap(),
+          getCategoryNameMap(),
         ]);
 
         const openRfqs = rfqs.filter((r: any) => r.status?.toUpperCase() === "OPEN");
@@ -55,21 +57,28 @@ export default function OfficerDashboardPage() {
           [...rfqs]
             .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
             .slice(0, 5)
-            .map((r: any) => ({
-              id: String(r.id || r.rfqId),
-              rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
-              title: r.title,
-              status: r.status,
-              bidCount: r.bidCount || 0,
-              deadline: r.deadline,
-            }))
+            .map((r: any) => {
+              const rawCategory = r.category || r.categoryName || "";
+              const category = /^\d+$/.test(String(rawCategory))
+                ? (categoryMap?.get(String(rawCategory)) || rawCategory)
+                : rawCategory;
+              return {
+                id: String(r.id || r.rfqId),
+                rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
+                title: r.title,
+                status: r.status,
+                bidCount: r.bidCount || 0,
+                deadline: r.deadline,
+                category,
+              };
+            })
         );
 
         setPendingPOs(
           pending.slice(0, 5).map((po: any) => ({
             id: String(po.id || po.poId),
             poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-            vendorName: po.vendorName || `Vendor #${po.vendorId}`,
+            vendorName: po.vendorName || vendorMap?.get(String(po.vendorId || "")) || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
             totalAmount: Number(po.totalAmount) || 0,
             status: po.status,
           }))

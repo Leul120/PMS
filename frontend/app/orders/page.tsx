@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { deliveryApi, poApi } from "@/lib/api";
+import { poApi, getVendorNameMap } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { PODialog } from "../procurement/po-dialog";
@@ -95,17 +95,24 @@ export default function OrdersPage() {
   async function loadOrders(page = 0) {
     try {
       setLoading(true);
-      const response = await poApi.getAll(page, PAGE_SIZE);
+      const [response, vendorMap] = await Promise.all([
+        poApi.getAll(page, PAGE_SIZE),
+        getVendorNameMap(),
+      ]);
       const items = response.content ?? [];
-      const normalised = items.map((po: any) => ({
-        ...po,
-        id: String(po.id || po.poId),
-        poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-        vendorName: po.vendorName || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
-        createdAt: po.createdAt || po.issueDate,
-        deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
-        totalAmount: Number(po.totalAmount) || 0,
-      }));
+      const normalised = items.map((po: any) => {
+        const vendorId = String(po.vendorId || '');
+        const vendorName = po.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : 'N/A');
+        return {
+          ...po,
+          id: String(po.id || po.poId),
+          poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
+          vendorName,
+          createdAt: po.createdAt || po.issueDate,
+          deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
+          totalAmount: Number(po.totalAmount) || 0,
+        };
+      });
       setOrders(normalised);
       setFilteredOrders(normalised);
       setTotalPages(response.totalPages ?? 0);

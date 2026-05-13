@@ -65,6 +65,7 @@ public class RequisitionService {
         return mapToRequisitionResponse(savedRequisition);
     }
     
+    @Transactional(readOnly = true)
     public PagedResponse<RequisitionResponse> getAllRequisitions(int page, int size) {
         Page<PurchaseRequisition> p = requisitionRepository.findAll(
             PageRequest.of(page, size, Sort.unsorted()));
@@ -73,19 +74,22 @@ public class RequisitionService {
             .page(p.getNumber()).size(p.getSize())
             .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
-    
+
+    @Transactional(readOnly = true)
     public RequisitionResponse getRequisition(Long requisitionId) {
         PurchaseRequisition requisition = requisitionRepository.findById(requisitionId)
             .orElseThrow(() -> new RuntimeException("Requisition not found"));
         return mapToRequisitionResponse(requisition);
     }
-    
+
+    @Transactional(readOnly = true)
     public List<RequisitionResponse> getRequisitionsByStatus(String status) {
         return requisitionRepository.findByStatus(status).stream()
             .map(this::mapToRequisitionResponse)
             .collect(Collectors.toList());
     }
-    
+
+    @Transactional(readOnly = true)
     public List<RequisitionResponse> getMyRequisitions(Long requesterId) {
         return requisitionRepository.findByRequesterId(requesterId).stream()
             .map(this::mapToRequisitionResponse)

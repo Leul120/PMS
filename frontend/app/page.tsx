@@ -9,7 +9,7 @@ import { Download, TrendingUp, DollarSign, Users, ShoppingCart, Package, MoreHor
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { analyticsApi, poApi, rfqApi, vendorApi } from "@/lib/api";
+import { analyticsApi, poApi, rfqApi, vendorApi, bidApi, getVendorNameMap } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
 import { 
@@ -194,19 +194,20 @@ export default function DashboardPage() {
       const canReadPOs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
       const canReadRFQs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
 
-      const [overview, vendorList, poList, rfqList] = await Promise.all([
+      const [overview, vendorList, poList, rfqList, vendorMap] = await Promise.all([
         canReadAnalytics ? analyticsApi.getDashboard().catch(() => null) : Promise.resolve(null),
         canReadVendors ? vendorApi.getAllList().catch(() => []) : Promise.resolve([]),
         canReadPOs ? poApi.getAllList().catch(() => []) : Promise.resolve([]),
         canReadRFQs ? rfqApi.getAllList().catch(() => []) : Promise.resolve([]),
-      ]) as [DashboardData | null, any[], any[], any[]];
+        getVendorNameMap(),
+      ]) as [DashboardData | null, any[], any[], any[], Map<string, string>];
 
       // Normalise POs
       const normalisedPOs = poList.map((po: any) => ({
         ...po,
         id: String(po.id || po.poId),
         poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-        vendorName: po.vendorName || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+        vendorName: po.vendorName || vendorMap?.get(String(po.vendorId || "")) || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
         createdAt: po.createdAt || po.issueDate,
         deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
         totalAmount: Number(po.totalAmount) || 0,

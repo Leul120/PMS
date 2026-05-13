@@ -17,7 +17,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { invoiceApi, poApi, threeWayMatchApi, deliveryApi } from "@/lib/api";
+import { invoiceApi, poApi, threeWayMatchApi, deliveryApi, getVendorNameMap } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
 import { RequireRole } from "@/components/require-role";
@@ -61,6 +61,8 @@ export default function InvoicesPage() {
   const [matchPoQuantity, setMatchPoQuantity] = useState("");
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchResult, setMatchResult] = useState<{ status: string; mismatchReason?: string } | null>(null);
+  // Deliveries for the selected invoice's PO
+  const [poDeliveries, setPoDeliveries] = useState<any[]>([]);
 
   // Dispute dialog
   const [disputeOpen, setDisputeOpen] = useState(false);
@@ -83,7 +85,7 @@ export default function InvoicesPage() {
       let data: any[] = [];
 
       if (isVendor) {
-        // VENDOR can't call GET /invoices â€â€ fetch invoices per PO instead
+        // VENDOR -- fetch invoices per PO instead of GET /invoices
         const pos = await poApi.getAllList().catch(() => []);
         const results = await Promise.allSettled(
           (pos as any[]).slice(0, 50).map((po: any) =>
@@ -94,23 +96,29 @@ export default function InvoicesPage() {
           if (r.status === "fulfilled") data.push(...(r.value as any[]));
         });
       } else {
-        data = await invoiceApi.getAll().catch(() => []);
+        const [data, vendorMap] = await Promise.all([
+          invoiceApi.getAll().catch(() => []),
+          getVendorNameMap(),
+        ]);
+        const normalised = (data as any[]).map((inv: any) => {
+          const vendorId = String(inv.vendorId || "");
+          const vendorName = inv.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "Unknown Vendor");
+          return {
+            id: String(inv.id || inv.invoiceId),
+            invoiceNumber: inv.invoiceNumber || `INV-${String(inv.id || inv.invoiceId).padStart(6, "0")}`,
+            poId: String(inv.poId || inv.purchaseOrderId || ""),
+            poNumber: inv.poNumber || (inv.poId ? `PO-${String(inv.poId).padStart(6, "0")}` : "--"),
+            vendorId,
+            vendorName,
+            invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
+            status: inv.status || "PENDING",
+            discrepancyFlag: inv.discrepancyFlag ?? false,
+            createdAt: inv.createdAt,
+          };
+        });
+        setInvoices(normalised);
+        setFilteredInvoices(normalised);
       }
-
-      const normalised = (data as any[]).map((inv: any) => ({
-        id: String(inv.id || inv.invoiceId),
-        invoiceNumber: inv.invoiceNumber || `INV-${String(inv.id || inv.invoiceId).padStart(6, "0")}`,
-        poId: String(inv.poId || inv.purchaseOrderId || ""),
-        poNumber: inv.poNumber || (inv.poId ? `PO-${String(inv.poId).padStart(6, "0")}` : "â€â€"),
-        vendorId: String(inv.vendorId || ""),
-        vendorName: inv.vendorName || `Vendor #${inv.vendorId}`,
-        invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
-        status: inv.status || "PENDING",
-        discrepancyFlag: inv.discrepancyFlag ?? false,
-        createdAt: inv.createdAt,
-      }));
-      setInvoices(normalised);
-      setFilteredInvoices(normalised);
     } catch {
       setInvoices([]);
       setFilteredInvoices([]);
@@ -200,7 +208,13 @@ export default function InvoicesPage() {
     setMatchPoAmount(String(invoice.invoiceAmount));
     setMatchPoQuantity("");
     setMatchResult(null);
+    setPoDeliveries([]);
     setMatchOpen(true);
+    // Pre-load deliveries for this PO so user picks by name, not raw ID
+    try {
+      const delivs = await deliveryApi.getByPO(invoice.poId).catch(() => []);
+      setPoDeliveries(delivs as any[]);
+    } catch { setPoDeliveries([]); }
   }
 
   async function handleThreeWayMatch() {
@@ -522,13 +536,33 @@ export default function InvoicesPage() {
                 <p><span className="text-gray-500">PO Reference:</span> <span className="font-medium">{matchInvoice?.poNumber}</span></p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Delivery Receipt ID *</Label>
-                <Input
-                  value={matchDeliveryId}
-                  onChange={(e) => setMatchDeliveryId(e.target.value)}
-                  placeholder="Enter delivery ID"
-                  className="h-8 text-xs"
-                />
+                <Label className="text-xs">Delivery Receipt *</Label>
+                {poDeliveries.length > 0 ? (
+                  <Select value={matchDeliveryId} onValueChange={setMatchDeliveryId}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select a delivery receipt..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {poDeliveries.map((d: any) => {
+                        const id = String(d.deliveryId || d.id);
+                        const qty = d.quantityDelivered ?? d.quantity ?? "?";
+                        const status = d.deliveryStatus || d.status || "";
+                        return (
+                          <SelectItem key={id} value={id}>
+                            DEL-{id.padStart(6, "0")} — {qty} units ({status})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={matchDeliveryId}
+                    onChange={(e) => setMatchDeliveryId(e.target.value)}
+                    placeholder="Enter delivery ID"
+                    className="h-8 text-xs"
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">

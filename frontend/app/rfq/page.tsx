@@ -40,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { rfqApi, bidApi, poApi, vendorApi } from "@/lib/api";
+import { rfqApi, bidApi, poApi, vendorApi, getVendorNameMap, getCategoryNameMap } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -217,12 +217,15 @@ export default function RFQPage() {
 
   async function openAwardDialog(rfq: RFQ) {
     try {
-      const bidsData = await bidApi.getByRfq(rfq.id);
+      const [bidsData, vendorMap] = await Promise.all([
+        bidApi.getByRfq(rfq.id),
+        getVendorNameMap(),
+      ]);
       const normalised = (bidsData as any[]).map((b: any) => ({
         ...b,
         id: String(b.id || b.bidId),
-        vendorName: b.vendorName || `Vendor #${b.vendorId}`,
-        deliveryTime: b.deliveryTime || (b.deliveryDays ? `${b.deliveryDays} days` : "â€â€"),
+        vendorName: b.vendorName || vendorMap.get(String(b.vendorId || "")) || (b.vendorId ? `Vendor #${b.vendorId}` : "Unknown Vendor"),
+        deliveryTime: b.deliveryTime || (b.deliveryDays ? `${b.deliveryDays} days` : "--"),
         score: b.score ?? (b.totalScore ? Math.round(Number(b.totalScore)) : 0),
       }));
       // Accept any non-rejected, non-awarded bid
@@ -277,18 +280,49 @@ export default function RFQPage() {
   async function loadRFQs(page = 0) {
     try {
       setLoading(true);
-      const response = await rfqApi.getAll(page, PAGE_SIZE);
+      const [response, categoryMap] = await Promise.all([
+        rfqApi.getAll(page, PAGE_SIZE),
+        getCategoryNameMap(),
+      ]);
       const items = response.content ?? [];
-      const normalised = items.map((r: any) => ({
-        ...r,
-        id: String(r.id || r.rfqId),
-        rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
-        category: r.category || r.categoryName || "",
-        maxBudget: r.maxBudget ?? r.estimatedValue ?? 0,
-        bidCount: r.bidCount ?? 0,
-        deadline: r.deadline,
-        createdAt: r.createdAt,
-      }));
+      
+      // Debug: Log category map contents
+      console.log('Category map loaded:', Array.from(categoryMap.entries()));
+      console.log('Sample RFQ data:', items.slice(0, 2));
+      const normalised = items.map((r: any) => {
+        // Resolve category: backend may return categoryName already, or just categoryId
+        const rawCategory = r.category || r.categoryName || "";
+        let category = rawCategory;
+        
+        // If backend already returned a resolved name (not starting with "Category #"), use it
+        if (rawCategory && !rawCategory.startsWith("Category #")) {
+          category = rawCategory;
+        }
+        // If it looks like a number (raw ID), resolve it from the map
+        else if (/^\d+$/.test(String(rawCategory))) {
+          const resolvedName = categoryMap.get(String(rawCategory));
+          if (resolvedName) {
+            category = resolvedName;
+          } else {
+            // Try to get category name from backend if map is empty
+            console.log(`Category map missing ID ${rawCategory}, map size: ${categoryMap.size}`);
+            category = `Category #${rawCategory}`;
+          }
+        } else if (!rawCategory) {
+          // Handle empty or null category
+          category = "Uncategorized";
+        }
+        return {
+          ...r,
+          id: String(r.id || r.rfqId),
+          rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
+          category,
+          maxBudget: r.maxBudget ?? r.estimatedValue ?? 0,
+          bidCount: r.bidCount ?? 0,
+          deadline: r.deadline,
+          createdAt: r.createdAt,
+        };
+      });
       setRfqs(normalised);
       setFilteredRfqs(normalised);
       setTotalPages(response.totalPages ?? 0);
@@ -322,12 +356,15 @@ export default function RFQPage() {
 
   async function loadBids(rfqId: string) {
     try {
-      const data = await bidApi.getByRfq(rfqId);
+      const [data, vendorMap] = await Promise.all([
+        bidApi.getByRfq(rfqId),
+        getVendorNameMap(),
+      ]);
       const normalised = (data as any[]).map((b: any) => ({
         ...b,
         id: String(b.id || b.bidId),
-        vendorName: b.vendorName || `Vendor #${b.vendorId}`,
-        deliveryTime: b.deliveryTime || (b.deliveryDays ? `${b.deliveryDays} days` : "â€â€"),
+        vendorName: b.vendorName || vendorMap.get(String(b.vendorId || "")) || (b.vendorId ? `Vendor #${b.vendorId}` : "Unknown Vendor"),
+        deliveryTime: b.deliveryTime || (b.deliveryDays ? `${b.deliveryDays} days` : "--"),
         score: b.score ?? (b.totalScore ? Math.round(Number(b.totalScore)) : 0),
       }));
       setBids(normalised);
@@ -341,7 +378,10 @@ export default function RFQPage() {
     if (rfqs.length === 0) return;
     try {
       setBidsLoading(true);
-      const results = await Promise.allSettled(rfqs.map(r => bidApi.getByRfq(r.id)));
+      const [results, vendorMap] = await Promise.all([
+        Promise.allSettled(rfqs.map(r => bidApi.getByRfq(r.id))),
+        getVendorNameMap(),
+      ]);
       const merged: Bid[] = [];
       results.forEach((result, idx) => {
         if (result.status === "fulfilled") {
@@ -349,8 +389,8 @@ export default function RFQPage() {
             merged.push({
               ...bid,
               id: String(bid.id || bid.bidId),
-              vendorName: bid.vendorName || `Vendor #${bid.vendorId}`,
-              deliveryTime: bid.deliveryTime || (bid.deliveryDays ? `${bid.deliveryDays} days` : "â€â€"),
+              vendorName: bid.vendorName || vendorMap.get(String(bid.vendorId || "")) || (bid.vendorId ? `Vendor #${bid.vendorId}` : "Unknown Vendor"),
+              deliveryTime: bid.deliveryTime || (bid.deliveryDays ? `${bid.deliveryDays} days` : "--"),
               score: bid.score ?? (bid.totalScore ? Math.round(Number(bid.totalScore)) : 0),
               rfqId: rfqs[idx].id,
               rfqTitle: rfqs[idx].title,
@@ -492,7 +532,7 @@ export default function RFQPage() {
                   <TableBody>
                     {filteredRfqs.map((rfq) => (
                       <TableRow key={rfq.id}>
-                        <TableCell className="font-medium">{rfq.id}</TableCell>
+                        <TableCell className="font-medium">{rfq.rfqNumber}</TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{rfq.title}</p>
@@ -511,11 +551,11 @@ export default function RFQPage() {
                             {rfq.bidCount}
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">{rfq.maxBudget}</TableCell>
+                        <TableCell className="font-medium">${rfq.maxBudget?.toLocaleString()}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {rfq.deadline}
+                            {rfq.deadline ? new Date(rfq.deadline).toLocaleDateString() : "--"}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
