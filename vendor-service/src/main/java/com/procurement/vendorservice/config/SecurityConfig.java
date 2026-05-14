@@ -38,9 +38,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/vendors").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
                 // Vendor by status
                 .requestMatchers(HttpMethod.GET, "/api/vendors/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
-                // Categories
-                .requestMatchers(HttpMethod.GET, "/api/vendors/categories/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // Categories — permitAll for service-to-service lookups (e.g. rfq-bidding-service → vendor-service)
+                .requestMatchers(HttpMethod.GET, "/api/vendors/categories/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/vendors/categories").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER")
                 // Documents
                 .requestMatchers(HttpMethod.GET, "/api/vendors/documents/expiring").hasAnyRole("ADMIN", "OFFICER", "MANAGER")
@@ -53,8 +53,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/vendors/*/status").hasAnyRole("ADMIN", "OFFICER")
                 // Vendor by user
                 .requestMatchers(HttpMethod.GET, "/api/vendors/user/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                // Single vendor get / update
-                .requestMatchers(HttpMethod.GET, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // Batch lookup — used by internal service-to-service calls (no JWT)
+                .requestMatchers(HttpMethod.POST, "/api/vendors/batch").permitAll()
+                // Single vendor get — permitAll so procurement-service can call without JWT
+                .requestMatchers(HttpMethod.GET, "/api/vendors/*").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
                 .anyRequest().authenticated()
             )

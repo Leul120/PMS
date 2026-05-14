@@ -20,7 +20,20 @@
       "PowerShell(Split-Path *)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\dawit\\\\PMS\\\\frontend\\\\app\" -Recurse -File | Where-Object {$_.Extension -eq \".tsx\"} | Select-Object -ExpandProperty Name | Sort-Object | Get-Unique)",
       "Bash(del *)",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "Bash(grep -r \"hardcode\\\\|TODO\\\\|FIXME\\\\|XXX\\\\|HACK\" /c/Users/PC/Documents/PMS/*/src/main/java --include=\"*.java\")",
+      "Bash(grep -r \"password\\\\|secret\\\\|key\" /c/Users/PC/Documents/PMS/*/src/main/resources/application.yml)",
+      "Bash(find *)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(xxd \"/c/Users/PC/Documents/PMS/frontend/app/vendors/performance/page.tsx\")",
+      "Bash(n.next)",
+      "Bash(n*.md)",
+      "Bash(Set-Content -Path \"C:\\\\Users\\\\PC\\\\Documents\\\\PMS\\\\frontend\\\\.dockerignore\" -Value \"node_modules`n.next`n.git`n*.md`n\" -Encoding utf8)",
+      "Bash(printf 'node_modules\\\\n.next\\\\n.git\\\\n*.md\\\\n' > /mnt/c/Users/PC/Documents/PMS/frontend/.dockerignore)"
+    ],
+    "additionalDirectories": [
+      "\\mnt\\c\\Users\\PC\\Documents\\PMS\\frontend"
     ]
   }
 }

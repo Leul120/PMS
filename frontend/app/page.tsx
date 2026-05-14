@@ -2,23 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, TrendingUp, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Download, TrendingUp, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { analyticsApi, poApi, rfqApi, vendorApi, bidApi, getVendorNameMap } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -39,10 +37,10 @@ interface DashboardData {
 // Helper to generate monthly spend data from POs
 function generateMonthlyData(pos: any[]) {
   if (pos.length === 0) return [];
-  
+
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const monthlySpend = new Array(12).fill(0);
-  
+
   pos.forEach((po) => {
     if (po.createdAt) {
       const date = new Date(po.createdAt);
@@ -50,7 +48,7 @@ function generateMonthlyData(pos: any[]) {
       monthlySpend[month] += po.totalAmount || 0;
     }
   });
-  
+
   // Only show months with data + current month
   const lastMonthWithData = monthlySpend.reduce((last, val, idx) => val > 0 ? idx : last, 0);
   const result = [];
@@ -59,48 +57,21 @@ function generateMonthlyData(pos: any[]) {
       result.push({ name: months[i], value: monthlySpend[i] });
     }
   }
-  
+
   return result.length > 0 ? result : [{ name: months[new Date().getMonth()], value: 0 }];
 }
 
 // Helper to generate category data from POs
 function generateCategoryData(pos: any[]) {
   if (pos.length === 0) return [];
-  
+
   const categories: Record<string, number> = {};
   pos.forEach((po) => {
     const cat = po.category || "Other";
     categories[cat] = (categories[cat] || 0) + (po.totalAmount || 0);
   });
-  
-  return Object.entries(categories).map(([name, value]) => ({ name, value }));
-}
 
-function StatCard({ title, value, icon: Icon, loading, color = "gray" }: any) {
-  const colors: Record<string, string> = {
-    gray: "bg-gray-50",
-    emerald: "bg-emerald-50",
-    blue: "bg-blue-50",
-    amber: "bg-amber-50",
-  };
-  
-  return (
-    <Card className={`border-0 shadow-sm ${colors[color]}`}>
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500">{title}</p>
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400 mt-1" />
-            ) : (
-              <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>
-            )}
-          </div>
-          <Icon className="h-4 w-4 text-gray-400" />
-        </div>
-      </CardContent>
-    </Card>
-  );
+  return Object.entries(categories).map(([name, value]) => ({ name, value }));
 }
 
 interface Activity {
@@ -147,7 +118,7 @@ export default function DashboardPage() {
   // Generate activity feed from POs, RFQs and vendors
   function generateActivities(pos: any[], rfqList: any[], vendorList: any[]): Activity[] {
     const activities: Activity[] = [];
-    
+
     // Add recent PO activities
     pos.slice(0, 5).forEach((po, idx) => {
       activities.push({
@@ -158,7 +129,7 @@ export default function DashboardPage() {
         time: po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "Recently"
       });
     });
-    
+
     // Add recent RFQ activities
     rfqList.slice(0, 3).forEach((rfq, idx) => {
       activities.push({
@@ -169,7 +140,7 @@ export default function DashboardPage() {
         time: rfq.createdAt ? new Date(rfq.createdAt).toLocaleDateString() : "Recently"
       });
     });
-    
+
     // Add vendor activities
     vendorList.filter(v => v.verified).slice(0, 2).forEach((vendor, idx) => {
       activities.push({
@@ -180,7 +151,7 @@ export default function DashboardPage() {
         time: "Recently"
       });
     });
-    
+
     return activities.slice(0, 10);
   }
 
@@ -267,19 +238,32 @@ export default function DashboardPage() {
     }
   }
 
+  const metrics = [
+    { label: "Total RFQs", value: dashboardData?.totalRFQs ?? rfqs.length, sub: "requests for quotation", icon: TrendingUp, loading },
+    { label: "Active Vendors", value: dashboardData?.vendorCount ?? vendors.length, sub: "registered suppliers", icon: Users, loading },
+    { label: "Purchase Orders", value: dashboardData?.totalPOs ?? purchaseOrders.length, sub: "all time", icon: ShoppingCart, loading },
+    { label: "Pending Approvals", value: dashboardData?.pendingApprovals ?? purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).length, sub: "awaiting action", icon: Clock, loading },
+  ];
+
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-xs text-gray-500">Overview of procurement activities</p>
+            <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Overview of procurement activities</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => router.push('/analytics')}>Download Report</Button>
+            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => router.push('/analytics')}>
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Reports
+            </Button>
             {canCreatePO && (
-            <Button size="sm" className="text-xs h-8" onClick={() => router.push('/procurement')}>New Purchase Order</Button>
+              <Button size="sm" className="text-xs h-8" onClick={() => router.push('/procurement')}>
+                <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+                New PO
+              </Button>
             )}
           </div>
         </div>
@@ -293,45 +277,31 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-3">
-          <StatCard
-            title="Total RFQs"
-            value={dashboardData?.totalRFQs || rfqs.length}
-            loading={loading}
-            icon={TrendingUp}
-            color="blue"
-          />
-          <StatCard
-            title="Active Vendors"
-            value={dashboardData?.vendorCount || vendors.length}
-            loading={loading}
-            icon={Users}
-            color="emerald"
-          />
-          <StatCard
-            title="Purchase Orders"
-            value={dashboardData?.totalPOs || purchaseOrders.length}
-            loading={loading}
-            icon={ShoppingCart}
-            color="gray"
-          />
-          <StatCard
-            title="Pending Approvals"
-            value={dashboardData?.pendingApprovals ?? purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).length}
-            loading={loading}
-            icon={Package}
-            color="amber"
-          />
+        {/* Flat Metric Strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+          {metrics.map(({ label, value, sub, icon: Icon, loading }) => (
+            <div key={label} className="px-4 py-3 flex items-center gap-3">
+              <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                {loading ? (
+                  <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" />
+                ) : (
+                  <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>
+                )}
+                {!loading && sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700">Spend Analysis</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Spend Analysis</p>
+            </div>
+            <div className="p-4">
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={generateMonthlyData(purchaseOrders)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -341,14 +311,14 @@ export default function DashboardPage() {
                   <Bar dataKey="value" fill="#1a73e8" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700">Spend by Category</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Spend by Category</p>
+            </div>
+            <div className="p-4">
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
                   <Pie
@@ -368,21 +338,21 @@ export default function DashboardPage() {
                   <Legend fontSize={11} />
                 </PieChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Activity and Approvals */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Recent Activity */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-gray-700">Recent Activity</CardTitle>
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Recent Activity</p>
               <Button variant="ghost" size="icon" className="h-7 w-7">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
-            </CardHeader>
-            <CardContent className="p-4">
+            </div>
+            <div className="p-4">
               <div className="space-y-3">
                 {activities.length === 0 ? (
                   <p className="text-gray-500 text-xs">No recent activity.</p>
@@ -395,7 +365,7 @@ export default function DashboardPage() {
                       activity.status === "paid" ? "bg-emerald-100" :
                       "bg-amber-100"
                     }`}>
-                      {activity.status === "approved" ? <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> :
+                      {activity.status === "approved" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
                        activity.status === "delivered" ? <Package className="h-3.5 w-3.5 text-blue-600" /> :
                        activity.status === "paid" ? <DollarSign className="h-3.5 w-3.5 text-emerald-600" /> :
                        <Clock className="h-3.5 w-3.5 text-amber-600" />}
@@ -416,18 +386,18 @@ export default function DashboardPage() {
                 ))
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Pending Approvals */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-gray-700">Pending Approvals</CardTitle>
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Pending Approvals</p>
               <Button variant="ghost" size="icon" className="h-7 w-7">
                 <ArrowUpRight className="h-4 w-4" />
               </Button>
-            </CardHeader>
-            <CardContent className="p-4">
+            </div>
+            <div className="p-4">
               <div className="space-y-3">
                 {purchaseOrders.filter(po => po.status?.toLowerCase().includes("pending")).length === 0 ? (
                   <p className="text-gray-500 text-xs">No pending approvals.</p>
@@ -452,48 +422,47 @@ export default function DashboardPage() {
                   ))
                 )}
               </div>
-              <Button variant="outline" className="w-full mt-4" asChild>
+              <Button variant="outline" size="sm" className="w-full mt-3 text-xs h-8" asChild>
                 <Link href="/procurement">View All Pending</Link>
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Frequently used operations</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-700">Quick Actions</p>
+          </div>
+          <div className="p-3">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {canCreatePO && (
-              <Button variant="outline" className="justify-start" onClick={() => router.push('/procurement')}>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                Create Purchase Order
-              </Button>
+                <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => router.push('/procurement')}>
+                  <ShoppingCart className="mr-2 h-3.5 w-3.5" />
+                  Create Purchase Order
+                </Button>
               )}
               {hasPermission("vendors:create") && (
-              <Button variant="outline" className="justify-start" onClick={() => router.push('/vendors')}>
-                <Users className="mr-2 h-4 w-4" />
-                Add New Vendor
-              </Button>
+                <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => router.push('/vendors')}>
+                  <Users className="mr-2 h-3.5 w-3.5" />
+                  Add New Vendor
+                </Button>
               )}
               {hasPermission("inventory:update") && (
-              <Button variant="outline" className="justify-start" onClick={() => router.push('/inventory')}>
-                <Package className="mr-2 h-4 w-4" />
-                Update Inventory
-              </Button>
+                <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => router.push('/inventory')}>
+                  <Package className="mr-2 h-3.5 w-3.5" />
+                  Update Inventory
+                </Button>
               )}
               {hasPermission("analytics:read") && (
-              <Button variant="outline" className="justify-start" onClick={() => router.push('/analytics')}>
-                <TrendingUp className="mr-2 h-4 w-4" />
-                View Reports
-              </Button>
+                <Button variant="outline" size="sm" className="justify-start text-xs h-8" onClick={() => router.push('/analytics')}>
+                  <TrendingUp className="mr-2 h-3.5 w-3.5" />
+                  View Reports
+                </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

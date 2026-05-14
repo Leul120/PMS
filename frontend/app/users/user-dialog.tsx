@@ -9,11 +9,7 @@ import { adminApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
 interface UserDialogProps {
@@ -31,13 +27,12 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
     email: "",
     password: "",
     phoneNumber: "",
-    roleName: "VENDOR", // Default to VENDOR for public registration
+    roleName: "VENDOR",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
       await adminApi.createUser({
         fullName: `${formData.firstName} ${formData.lastName}`,
@@ -46,22 +41,13 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
         phoneNumber: formData.phoneNumber,
         roleName: formData.roleName,
       });
-      
       toast({
         title: "User created",
         description: `${formData.firstName} ${formData.lastName} has been added successfully.`,
       });
-      
       onSuccess();
       onOpenChange(false);
-      setFormData({
-        firstName: "",
-        lastName: "",
-        email: "",
-        password: "",
-        phoneNumber: "",
-        roleName: "VENDOR",
-      });
+      setFormData({ firstName: "", lastName: "", email: "", password: "", phoneNumber: "", roleName: "VENDOR" });
     } catch (error) {
       toast({
         title: "Error",
@@ -75,40 +61,42 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[480px] rounded">
         <DialogHeader>
-          <DialogTitle>Add New User</DialogTitle>
-          <DialogDescription>
-            Create a new user account for the procurement system.
+          <DialogTitle className="text-sm font-semibold">Add New User</DialogTitle>
+          <DialogDescription className="text-xs">
+            Create a new user account and assign their role.
           </DialogDescription>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name *</Label>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="firstName" className="text-xs font-medium">First Name *</Label>
               <Input
                 id="firstName"
                 value={formData.firstName}
                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                 placeholder="John"
                 required
+                className="h-8 text-xs border-gray-200"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="lastName" className="text-xs font-medium">Last Name *</Label>
               <Input
                 id="lastName"
                 value={formData.lastName}
                 onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                 placeholder="Doe"
                 required
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-xs font-medium">Email *</Label>
             <Input
               id="email"
               type="email"
@@ -116,38 +104,38 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="user@company.com"
               required
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-xs font-medium">Password *</Label>
             <Input
               id="password"
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              placeholder="Enter secure password"
+              placeholder="Min 8 characters"
               required
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="phoneNumber" className="text-xs font-medium">Phone</Label>
               <Input
                 id="phoneNumber"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                 placeholder="+1 234 567 890"
+                className="h-8 text-xs border-gray-200"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="roleName">Role *</Label>
-              <Select
-                value={formData.roleName}
-                onValueChange={(value) => setFormData({ ...formData, roleName: value })}
-              >
-                <SelectTrigger id="roleName">
+            <div className="space-y-1.5">
+              <Label htmlFor="roleName" className="text-xs font-medium">Role *</Label>
+              <Select value={formData.roleName} onValueChange={(v) => setFormData({ ...formData, roleName: v })}>
+                <SelectTrigger id="roleName" className="h-8 text-xs">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
@@ -161,12 +149,12 @@ export function UserDialog({ open, onOpenChange, onSuccess }: UserDialogProps) {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Create User
             </Button>
           </DialogFooter>

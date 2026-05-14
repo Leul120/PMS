@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { ProtectedRoute } from "@/components/protected-route";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { SessionExpiryWarning } from "@/components/session-expiry-warning";
 
 export const metadata: Metadata = {
   title: "ProcurePro - Enterprise Procurement Management",
@@ -18,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased text-[13px]">
+      <body className="font-sans antialiased text-sm">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -30,6 +31,7 @@ export default function RootLayout({
               {children}
             </ProtectedRoute>
           </ErrorBoundary>
+          <SessionExpiryWarning />
           <Toaster />
         </ThemeProvider>
       </body>

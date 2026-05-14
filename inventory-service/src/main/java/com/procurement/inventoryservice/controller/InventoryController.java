@@ -1,5 +1,6 @@
 package com.procurement.inventoryservice.controller;
 
+import com.procurement.inventoryservice.dto.InventoryItemRequest;
 import com.procurement.inventoryservice.dto.PagedResponse;
 import com.procurement.inventoryservice.entity.InventoryItem;
 import com.procurement.inventoryservice.service.InventoryService;
@@ -31,13 +32,15 @@ public class InventoryController {
     }
 
     @PostMapping
-    public ResponseEntity<InventoryItem> createItem(@Valid @RequestBody InventoryItem item) {
-        return ResponseEntity.ok(inventoryService.createItem(item));
+    public ResponseEntity<InventoryItem> createItem(@Valid @RequestBody InventoryItemRequest request) {
+        return ResponseEntity.ok(inventoryService.createItem(request));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<InventoryItem> updateItem(@PathVariable Long id, @Valid @RequestBody InventoryItem item) {
-        return ResponseEntity.ok(inventoryService.updateItem(id, item));
+    public ResponseEntity<InventoryItem> updateItem(
+            @PathVariable Long id,
+            @Valid @RequestBody InventoryItemRequest request) {
+        return ResponseEntity.ok(inventoryService.updateItem(id, request));
     }
 
     @DeleteMapping("/{id}")
@@ -47,8 +50,13 @@ public class InventoryController {
     }
 
     @PostMapping("/{id}/adjust")
-    public ResponseEntity<InventoryItem> adjustStock(@PathVariable Long id, @RequestBody Map<String, Integer> request) {
+    public ResponseEntity<InventoryItem> adjustStock(
+            @PathVariable Long id,
+            @RequestBody Map<String, Integer> request) {
         Integer quantityChange = request.get("quantityChange");
+        if (quantityChange == null) {
+            return ResponseEntity.badRequest().build();
+        }
         return ResponseEntity.ok(inventoryService.adjustStock(id, quantityChange));
     }
 

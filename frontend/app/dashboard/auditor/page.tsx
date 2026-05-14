@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/require-role";
 import { poApi, vendorApi, rfqApi, auditApi, authApi, getVendorNameMap } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -17,6 +15,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+
+function poStatusChip(s: string) {
+  const l = s?.toLowerCase() || "";
+  const cls = (l.includes("approved") && !l.includes("pending")) ? "bg-emerald-100 text-emerald-700"
+    : l.includes("pending") ? "bg-amber-100 text-amber-700"
+    : l.includes("rejected") ? "bg-red-100 text-red-700"
+    : "bg-gray-100 text-gray-600";
+  return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{s}</span>;
+}
 
 export default function AuditorDashboardPage() {
   const hasRole = useAuthStore((state) => state.hasRole);
@@ -31,6 +38,7 @@ export default function AuditorDashboardPage() {
   const [filteredLogs, setFilteredLogs] = useState<any[]>([]);
   const [auditSearch, setAuditSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hasRole(["ADMIN", "AUDITOR"])) return;
@@ -39,7 +47,7 @@ export default function AuditorDashboardPage() {
       try {
         setLoading(true);
 
-        const [poList, vendorMap, rfqs, auditLogs] = await Promise.all([
+        const [poList, vendorMap, rfqs, logs] = await Promise.all([
           poApi.getAllList().catch(() => []),
           getVendorNameMap(),
           rfqApi.getAllList().catch(() => []),
@@ -124,7 +132,7 @@ export default function AuditorDashboardPage() {
         // ── Audit logs ─────────────────────────────────────────────────────
         // AuditLogResponse fields: logId, actionType, entityAffected, timestamp,
         //                          oldValue, newValue, userId (Long)
-        const logs = await auditApi.getAll().catch(() => []);
+        // 'logs' was already fetched in the Promise.all above — reuse it.
         const normalised = (logs as any[]).slice(0, 100).map((l: any) => {
           const uid = l.userId != null ? String(l.userId) : null;
           return {
@@ -141,8 +149,8 @@ export default function AuditorDashboardPage() {
         });
         setAuditLogs(normalised);
         setFilteredLogs(normalised);
-      } catch {
-        // silently fail — show empty state
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard data.");
       } finally {
         setLoading(false);
       }
@@ -191,32 +199,19 @@ export default function AuditorDashboardPage() {
   }
 
   const statCards = [
-    { label: "Total POs", value: stats.totalPOs, icon: Eye, color: "bg-gray-50 text-gray-700" },
+    { label: "Total POs", value: stats.totalPOs, icon: Eye },
     {
       label: "Compliance Rate",
       value: `${stats.complianceRate}%`,
       icon: ClipboardCheck,
-      color:
-        stats.complianceRate >= 80
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-amber-50 text-amber-700",
     },
     {
       label: "Verified Vendors",
       value: `${stats.verifiedVendors}/${stats.totalVendors}`,
       icon: CheckCircle,
-      color: "bg-blue-50 text-blue-700",
     },
-    { label: "Open RFQs", value: stats.openRfqs, icon: FileText, color: "bg-violet-50 text-violet-700" },
+    { label: "Open RFQs", value: stats.openRfqs, icon: FileText },
   ];
-
-  const poStatusVariant = (s: string) => {
-    const l = s?.toLowerCase() || "";
-    if (l.includes("approved") && !l.includes("pending")) return "success";
-    if (l.includes("pending")) return "warning";
-    if (l.includes("rejected")) return "destructive";
-    return "secondary";
-  };
 
   return (
     <RequireRole allowedRoles={["ADMIN", "AUDITOR"]}>
@@ -238,44 +233,44 @@ export default function AuditorDashboardPage() {
             </Button>
           </div>
 
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-3">
-            {statCards.map(({ label, value, icon: Icon, color }) => (
-              <Card key={label} className="border-0 shadow-sm">
-                <CardContent className={`p-3 ${color.split(" ")[0]}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`text-xs ${color.split(" ")[1]}`}>{label}</p>
-                      <p className={`text-xl font-semibold mt-1 ${color.split(" ")[1]}`}>
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : value}
-                      </p>
-                    </div>
-                    <Icon className={`h-5 w-5 opacity-60 ${color.split(" ")[1]}`} />
-                  </div>
-                </CardContent>
-              </Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+            {statCards.map(({ label, value, icon: Icon }) => (
+              <div key={label} className="px-4 py-3 flex items-center gap-3">
+                <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                  {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                </div>
+              </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Recent Transactions */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-700">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">
                   Recent Transactions
-                </CardTitle>
+                </p>
                 <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
                   <Link href="/orders">View all</Link>
                 </Button>
-              </CardHeader>
-              <CardContent className="p-0">
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">PO</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Vendor</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Amount</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">PO</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -293,7 +288,7 @@ export default function AuditorDashboardPage() {
                       </TableRow>
                     ) : (
                       recentPOs.map((po) => (
-                        <TableRow key={po.id}>
+                        <TableRow key={po.id} className="hover:bg-transparent">
                           <TableCell className="py-2">
                             <p className="text-xs font-medium">{po.poNumber}</p>
                             <p className="text-[10px] text-gray-500">
@@ -309,42 +304,35 @@ export default function AuditorDashboardPage() {
                             ${po.totalAmount.toLocaleString()}
                           </TableCell>
                           <TableCell className="py-2">
-                            <Badge
-                              variant={poStatusVariant(po.status)}
-                              className="text-[10px]"
-                            >
-                              {po.status}
-                            </Badge>
+                            {poStatusChip(po.status)}
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Compliance Issues */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-700">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">
                   Compliance Issues
                   {nonCompliantVendors.length > 0 && (
-                    <Badge variant="warning" className="ml-2 text-[10px]">
-                      {nonCompliantVendors.length}
-                    </Badge>
+                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">{nonCompliantVendors.length}</span>
                   )}
-                </CardTitle>
+                </p>
                 <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
                   <Link href="/vendors">View all</Link>
                 </Button>
-              </CardHeader>
-              <CardContent className="p-0">
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Vendor</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -363,32 +351,29 @@ export default function AuditorDashboardPage() {
                       </TableRow>
                     ) : (
                       nonCompliantVendors.map((v) => (
-                        <TableRow key={v.id}>
+                        <TableRow key={v.id} className="hover:bg-transparent">
                           <TableCell className="py-2">
                             <p className="text-xs font-medium">{v.companyName}</p>
                             <p className="text-[10px] text-gray-500">{v.email}</p>
                           </TableCell>
                           <TableCell className="py-2">
-                            <Badge variant="warning" className="text-[10px]">
-                              <AlertCircle className="h-2.5 w-2.5 mr-1" />
-                              {v.complianceStatus}
-                            </Badge>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700"><AlertCircle className="h-2.5 w-2.5" />{v.complianceStatus}</span>
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* Quick Access */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700">Quick Access</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 grid grid-cols-4 gap-2">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Quick Access</p>
+            </div>
+            <div className="p-3 grid grid-cols-4 gap-2">
               {[
                 { label: "View Vendors", href: "/vendors", icon: Eye },
                 { label: "View RFQs", href: "/rfq", icon: Eye },
@@ -408,18 +393,18 @@ export default function AuditorDashboardPage() {
                   </Link>
                 </Button>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Audit Trail */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-gray-700">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">
                 Audit Trail
                 <span className="ml-2 text-[10px] font-normal text-gray-400">
                   ({filteredLogs.length} entries)
                 </span>
-              </CardTitle>
+              </p>
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -442,8 +427,8 @@ export default function AuditorDashboardPage() {
                   Export CSV
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
+            </div>
+            <div>
               {loading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -458,12 +443,12 @@ export default function AuditorDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Action</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Entity</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Action</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Entity</TableHead>
                       {/* "Performed By" resolves AuditLog.userId → UserResponse.fullName */}
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Performed By</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Timestamp</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Change</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Performed By</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Timestamp</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Change</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -524,8 +509,8 @@ export default function AuditorDashboardPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     </RequireRole>

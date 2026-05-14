@@ -6,14 +6,16 @@ import com.procurement.authservice.service.UserManagementService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
- * User Management Controller - Only accessible by ADMIN
- * Handles user creation, role assignment, and account management
+ * User Management Controller — ADMIN only.
+ * userId is always read from the SecurityContext (set by JwtAuthenticationFilter
+ * after validating the JWT). No header trust required.
  */
 @RestController
 @RequestMapping("/api/admin/users")
@@ -21,6 +23,14 @@ import java.util.List;
 public class UserManagementController {
 
     private final UserManagementService userManagementService;
+
+    private Long currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) return 0L;
+        Object principal = auth.getPrincipal();
+        if (principal instanceof Long id) return id;
+        try { return Long.parseLong(principal.toString()); } catch (NumberFormatException e) { return 0L; }
+    }
 
     @GetMapping
     @Auditable(action = "READ", entityType = "User")
@@ -36,10 +46,8 @@ public class UserManagementController {
 
     @PostMapping
     @Auditable(action = "CREATE", entityType = "User")
-    public ResponseEntity<UserResponse> createUser(
-            @Valid @RequestBody CreateUserRequest request,
-            @RequestHeader("X-User-Id") Long adminId) {
-        return ResponseEntity.ok(userManagementService.createUser(request, adminId));
+    public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
+        return ResponseEntity.ok(userManagementService.createUser(request, currentUserId()));
     }
 
     @PutMapping("/{userId}")

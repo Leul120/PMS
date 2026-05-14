@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
 import { rfqApi, bidApi, poApi, deliveryApi, getVendorNameMap } from "@/lib/api";
 import Link from "next/link";
-import { Loader2, Truck, Gavel, Package, Building2, Receipt, Star } from "lucide-react";
+import { Loader2, Truck, Gavel, Package, Building2, Receipt, Star, ClipboardList } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -111,69 +109,39 @@ export default function VendorDashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-3">
-            <Card className="border-0 shadow-sm bg-blue-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-blue-600">Open RFQs</p>
-                <p className="text-xl font-semibold text-blue-700 mt-1">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.openRfqs}
-                </p>
-                <Link href="/rfq" className="text-[10px] text-blue-500 hover:underline">
-                  View all
-                </Link>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-emerald-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-emerald-600">My Bids</p>
-                <p className="text-xl font-semibold text-emerald-700 mt-1">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.myBids}
-                </p>
-                <Link href="/rfq" className="text-[10px] text-emerald-500 hover:underline">
-                  View bids
-                </Link>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-amber-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-amber-600">Purchase Orders</p>
-                <p className="text-xl font-semibold text-amber-700 mt-1">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.myOrders}
-                </p>
-                <Link href="/orders" className="text-[10px] text-amber-500 hover:underline">
-                  View orders
-                </Link>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-gray-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-gray-500">Deliveries</p>
-                <p className="text-xl font-semibold text-gray-700 mt-1">
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : stats.deliveries}
-                </p>
-                <Link href="/deliveries" className="text-[10px] text-gray-500 hover:underline">
-                  Track
-                </Link>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+            {[
+              { label: "Open RFQs", value: stats.openRfqs, href: "/rfq", icon: Gavel, sub: "available to bid" },
+              { label: "My Bids", value: stats.myBids, href: "/rfq", icon: ClipboardList, sub: "submitted bids" },
+              { label: "Purchase Orders", value: stats.myOrders, href: "/orders", icon: Package, sub: "awarded orders" },
+              { label: "Deliveries", value: stats.deliveries, href: "/deliveries", icon: Truck, sub: "total deliveries" },
+            ].map(({ label, value, href, icon: Icon, sub }) => (
+              <div key={label} className="px-4 py-3 flex items-center gap-3">
+                <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                  {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                  {!loading && <Link href={href} className="text-[10px] text-gray-400 hover:underline mt-0.5 block">{sub}</Link>}
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Recent Bids */}
-            <Card className="col-span-2 border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700">My Recent Bids</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
+            <div className="col-span-2 border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">My Recent Bids</p>
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Bid #</TableHead>
-                      {/* RFQ title resolved from Bid.rfqId via rfqTitleMap */}
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">RFQ</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Amount</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Delivery</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Bid #</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">RFQ</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Delivery</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -185,16 +153,17 @@ export default function VendorDashboardPage() {
                       </TableRow>
                     ) : recentBids.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-6 text-gray-500 text-xs">
-                          No bids yet.{" "}
-                          <Link href="/rfq" className="text-primary hover:underline">
-                            Browse open RFQs
+                        <TableCell colSpan={5} className="text-center py-8">
+                          <Gavel className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                          <p className="text-xs text-gray-500">No bids submitted yet</p>
+                          <Link href="/rfq" className="text-[10px] text-primary hover:underline mt-1 block">
+                            Browse open RFQs to get started
                           </Link>
                         </TableCell>
                       </TableRow>
                     ) : (
                       recentBids.map((bid) => (
-                        <TableRow key={bid.id}>
+                        <TableRow key={bid.id} className="hover:bg-gray-50 transition-colors">
                           <TableCell className="text-xs font-medium py-2">
                             BID-{String(bid.id).padStart(4, "0")}
                           </TableCell>
@@ -206,33 +175,26 @@ export default function VendorDashboardPage() {
                           </TableCell>
                           <TableCell className="text-xs py-2">{bid.deliveryTime}</TableCell>
                           <TableCell className="py-2">
-                            <Badge
-                              variant={
-                                bid.status?.toUpperCase() === "AWARDED"
-                                  ? "success"
-                                  : bid.status?.toUpperCase() === "SUBMITTED"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[10px]"
-                            >
-                              {bid.status}
-                            </Badge>
+                            {(() => {
+                              const s = bid.status?.toUpperCase();
+                              const cls = s === "AWARDED" ? "bg-emerald-100 text-emerald-700" : s === "SUBMITTED" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600";
+                              return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{bid.status}</span>;
+                            })()}
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Quick Actions */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 space-y-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">Quick Actions</p>
+              </div>
+              <div className="p-3 space-y-2">
                 <Button variant="outline" size="sm" className="w-full justify-start text-xs h-8" asChild>
                   <Link href="/rfq">
                     <Gavel className="mr-2 h-3.5 w-3.5" />Browse &amp; Bid on RFQs
@@ -263,8 +225,8 @@ export default function VendorDashboardPage() {
                     <Building2 className="mr-2 h-3.5 w-3.5" />Update Profile
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </div>
       </DashboardLayout>

@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,7 +21,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { RequireRole } from "@/components/require-role";
 import {
   FileText, Plus, Search, Scale, AlertTriangle, CheckCircle,
-  Loader2, XCircle, MessageSquare,
+  Loader2, XCircle, MessageSquare, Receipt, Clock, Filter,
 } from "lucide-react";
 
 interface Invoice {
@@ -82,25 +80,34 @@ export default function InvoicesPage() {
   async function loadInvoices() {
     try {
       setLoading(true);
-      let data: any[] = [];
 
       if (isVendor) {
-        // VENDOR -- fetch invoices per PO instead of GET /invoices
-        const pos = await poApi.getAllList().catch(() => []);
-        const results = await Promise.allSettled(
-          (pos as any[]).slice(0, 50).map((po: any) =>
-            invoiceApi.getByPO(po.id || po.poId).catch(() => [])
-          )
-        );
-        results.forEach((r) => {
-          if (r.status === "fulfilled") data.push(...(r.value as any[]));
-        });
+        // VENDOR — use the dedicated vendor invoice endpoint to avoid N+1
+        const vendorId = user?.id || user?.userId;
+        if (!vendorId) { setInvoices([]); setFilteredInvoices([]); return; }
+
+        const raw = await invoiceApi.getByVendor(vendorId).catch(() => []);
+        const vendorMap = await getVendorNameMap();
+        const normalised = (raw as any[]).map((inv: any) => ({
+          id: String(inv.id || inv.invoiceId),
+          invoiceNumber: inv.invoiceNumber || `INV-${String(inv.id || inv.invoiceId).padStart(6, "0")}`,
+          poId: String(inv.poId || inv.purchaseOrderId || ""),
+          poNumber: inv.poNumber || (inv.poId ? `PO-${String(inv.poId).padStart(6, "0")}` : "--"),
+          vendorId: String(inv.vendorId || vendorId),
+          vendorName: inv.vendorName || vendorMap?.get(String(inv.vendorId || vendorId)) || "My Company",
+          invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
+          status: inv.status || "PENDING",
+          discrepancyFlag: inv.discrepancyFlag ?? false,
+          createdAt: inv.createdAt || inv.invoiceDate,
+        }));
+        setInvoices(normalised);
+        setFilteredInvoices(normalised);
       } else {
-        const [data, vendorMap] = await Promise.all([
+        const [rawInvoices, vendorMap] = await Promise.all([
           invoiceApi.getAll().catch(() => []),
           getVendorNameMap(),
         ]);
-        const normalised = (data as any[]).map((inv: any) => {
+        const normalised = (rawInvoices as any[]).map((inv: any) => {
           const vendorId = String(inv.vendorId || "");
           const vendorName = inv.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "Unknown Vendor");
           return {
@@ -113,7 +120,7 @@ export default function InvoicesPage() {
             invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
             status: inv.status || "PENDING",
             discrepancyFlag: inv.discrepancyFlag ?? false,
-            createdAt: inv.createdAt,
+            createdAt: inv.createdAt || inv.invoiceDate,
           };
         });
         setInvoices(normalised);
@@ -276,17 +283,6 @@ export default function InvoicesPage() {
     }
   }
 
-  const statusVariant = (status: string, flag?: boolean) => {
-    if (flag) return "destructive";
-    switch (status?.toUpperCase()) {
-      case "APPROVED": return "success";
-      case "PENDING": return "warning";
-      case "DISPUTED": return "destructive";
-      case "VALIDATED": return "success";
-      default: return "secondary";
-    }
-  };
-
   const stats = {
     total: invoices.length,
     pending: invoices.filter((i) => i.status?.toUpperCase() === "PENDING").length,
@@ -315,37 +311,34 @@ export default function InvoicesPage() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-3">
-            <Card className="border-0 shadow-sm bg-gray-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-gray-500">Total</p>
-                <p className="text-xl font-semibold text-gray-700 mt-1">{loading ? "â€â€" : stats.total}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-amber-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-amber-600">Pending Review</p>
-                <p className="text-xl font-semibold text-amber-700 mt-1">{loading ? "â€â€" : stats.pending}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-emerald-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-emerald-600">Approved</p>
-                <p className="text-xl font-semibold text-emerald-700 mt-1">{loading ? "â€â€" : stats.approved}</p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-red-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-red-600">Disputed</p>
-                <p className="text-xl font-semibold text-red-700 mt-1">{loading ? "â€â€" : stats.disputed}</p>
-              </CardContent>
-            </Card>
-          </div>
+          {(() => {
+            const totalValue = invoices.reduce((s,i) => s + i.invoiceAmount, 0);
+            const pendingValue = invoices.filter(i => i.status?.toUpperCase() === "PENDING").reduce((s,i) => s + i.invoiceAmount, 0);
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+                {[
+                  { label: "Total Invoices", value: stats.total, sub: `$${totalValue.toLocaleString()} total`, icon: Receipt },
+                  { label: "Awaiting Review", value: stats.pending, sub: pendingValue > 0 ? `$${pendingValue.toLocaleString()} pending` : "None pending", icon: Clock },
+                  { label: "Approved", value: stats.approved, sub: "Cleared for payment", icon: CheckCircle },
+                  { label: "Disputed", value: stats.disputed, sub: stats.disputed > 0 ? "Needs resolution" : "No disputes", icon: AlertTriangle },
+                ].map(({ label, value, sub, icon: Icon }) => (
+                  <div key={label} className="px-4 py-3 flex items-center gap-3">
+                    <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                      {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                      {!loading && sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Table */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700">Invoice List</CardTitle>
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">Invoice List</p>
               <div className="flex gap-2">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -370,8 +363,8 @@ export default function InvoicesPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
+            </div>
+            <div>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -380,13 +373,13 @@ export default function InvoicesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Invoice #</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">PO Reference</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Vendor</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Amount</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Date</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Actions</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Invoice #</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">PO Reference</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Date</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -412,13 +405,19 @@ export default function InvoicesPage() {
                           </TableCell>
                           <TableCell className="py-2.5">
                             <div className="flex items-center gap-1.5">
-                              <Badge variant={statusVariant(inv.status, inv.discrepancyFlag)} className="text-[10px]">
-                                {inv.discrepancyFlag ? "DISCREPANCY" : inv.status}
-                              </Badge>
+                              {(() => {
+                                const label = inv.discrepancyFlag ? "DISCREPANCY" : inv.status;
+                                const cls = inv.discrepancyFlag ? "bg-red-100 text-red-700"
+                                  : inv.status?.toUpperCase() === "APPROVED" || inv.status?.toUpperCase() === "VALIDATED" ? "bg-emerald-100 text-emerald-700"
+                                  : inv.status?.toUpperCase() === "PENDING" ? "bg-amber-100 text-amber-700"
+                                  : inv.status?.toUpperCase() === "DISPUTED" ? "bg-red-100 text-red-700"
+                                  : "bg-gray-100 text-gray-600";
+                                return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{label}</span>;
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell className="text-xs text-gray-500 py-2.5">
-                            {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "â€â€"}
+                            {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}
                           </TableCell>
                           <TableCell className="py-2.5">
                             <div className="flex gap-1.5">
@@ -434,7 +433,7 @@ export default function InvoicesPage() {
                                   Validate
                                 </Button>
                               )}
-                              {canDispute && (inv.discrepancyFlag || inv.status?.toUpperCase() === "DISPUTED") && (
+                              {canDispute && !["APPROVED", "VALIDATED"].includes(inv.status?.toUpperCase()) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -459,13 +458,13 @@ export default function InvoicesPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        {/* ââ€€ââ€€ Submit Invoice Dialog (Vendor) ââ€€ââ€€ */}
+        {/* Submit Invoice Dialog (Vendor) */}
         <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
-          <DialogContent className="sm:max-w-[440px]">
+          <DialogContent className="sm:max-w-[440px] rounded">
             <DialogHeader>
               <DialogTitle>Submit Invoice</DialogTitle>
               <DialogDescription>
@@ -485,7 +484,7 @@ export default function InvoicesPage() {
                     ) : (
                       availablePOs.map((po) => (
                         <SelectItem key={po.id} value={po.id}>
-                          {po.poNumber} â€â€ ${po.totalAmount.toLocaleString()}
+                          {po.poNumber} — ${po.totalAmount.toLocaleString()}
                         </SelectItem>
                       ))
                     )}
@@ -520,9 +519,9 @@ export default function InvoicesPage() {
           </DialogContent>
         </Dialog>
 
-        {/* ââ€€ââ€€ 3-Way Match Validation Dialog (Officer) ââ€€ââ€€ */}
+        {/* 3-Way Match Validation Dialog (Officer) */}
         <Dialog open={matchOpen} onOpenChange={(o) => { setMatchOpen(o); if (!o) setMatchResult(null); }}>
-          <DialogContent className="sm:max-w-[480px]">
+          <DialogContent className="sm:max-w-[480px] rounded">
             <DialogHeader>
               <DialogTitle>3-Way Match Validation</DialogTitle>
               <DialogDescription>
@@ -623,9 +622,9 @@ export default function InvoicesPage() {
           </DialogContent>
         </Dialog>
 
-        {/* ââ€€ââ€€ Dispute Dialog ââ€€ââ€€ */}
+        {/* Dispute Dialog */}
         <Dialog open={disputeOpen} onOpenChange={setDisputeOpen}>
-          <DialogContent className="sm:max-w-[420px]">
+          <DialogContent className="sm:max-w-[420px] rounded">
             <DialogHeader>
               <DialogTitle>Raise Invoice Dispute</DialogTitle>
               <DialogDescription>

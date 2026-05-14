@@ -37,10 +37,12 @@ public class SecurityConfig {
 
                 // ── Deliveries ──────────────────────────────────────────────
                 .requestMatchers(HttpMethod.GET, "/api/deliveries/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.PUT, "/api/deliveries/*/status").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
                 .requestMatchers(HttpMethod.POST, "/api/deliveries").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
 
                 // ── Invoices ────────────────────────────────────────────────
                 .requestMatchers(HttpMethod.GET, "/api/invoices/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/invoices/vendor/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
                 .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/validate").hasAnyRole("ADMIN", "OFFICER")
                 .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/dispute").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
                 .requestMatchers(HttpMethod.POST, "/api/invoices").hasAnyRole("ADMIN", "OFFICER", "VENDOR")

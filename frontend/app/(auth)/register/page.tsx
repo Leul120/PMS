@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,18 +112,14 @@ export default function RegisterPage() {
             <span className="text-lg font-semibold">ProcurePro</span>
           </div>
 
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-lg font-semibold text-center">
-                Create account
-              </CardTitle>
-              <CardDescription className="text-center text-xs text-gray-500">
-                Start your 14-day free trial
-              </CardDescription>
-            </CardHeader>
+          <div className="border border-gray-200 rounded bg-white">
+            <div className="px-6 pt-5 pb-4 text-center space-y-1">
+              <h2 className="text-base font-semibold text-gray-900">Create account</h2>
+              <p className="text-xs text-gray-500">Start your 14-day free trial</p>
+            </div>
 
             <form onSubmit={handleSubmit}>
-              <CardContent className="space-y-3">
+              <div className="px-6 pb-4 space-y-3">
                 {step === 1 ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
@@ -259,10 +254,10 @@ export default function RegisterPage() {
                     <span className="bg-white px-2 text-gray-400">SSO coming soon</span>
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </form>
 
-            <div className="p-4 pt-0">
+            <div className="px-6 pb-5">
               <p className="text-center text-xs text-gray-500">
                 Already have an account?{" "}
                 <Link href="/login" className="font-medium text-primary hover:text-primary/80">
@@ -270,7 +265,7 @@ export default function RegisterPage() {
                 </Link>
               </p>
             </div>
-          </Card>
+          </div>
 
           <p className="mt-6 text-center text-[10px] text-gray-400">
             By creating an account, you agree to our{" "}

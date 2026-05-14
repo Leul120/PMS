@@ -367,6 +367,7 @@ services:
       - REDIS_HOST=redis-procurement
       - REDIS_PORT=6379
       - AUTH_SERVICE_URL=http://auth-service:8081
+      - VENDOR_SERVICE_URL=http://vendor-service:8082
       - RFQ_SERVICE_URL=http://rfq-bidding-service:8083
       - JWT_SECRET=${JWT_SECRET:-procurement-secret-key-for-docker-deployment-min32chars}
     depends_on:
@@ -375,6 +376,8 @@ services:
       redis-procurement:
         condition: service_started
       auth-service:
+        condition: service_started
+      vendor-service:
         condition: service_started
       rfq-bidding-service:
         condition: service_started

@@ -47,8 +47,8 @@ public class SecurityConfig {
                 // Current-user profile (any authenticated user)
                 .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
 
-                // User list — ADMIN, OFFICER, MANAGER, AUDITOR
-                .requestMatchers(HttpMethod.GET, "/api/auth/users").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                // User list — ADMIN, OFFICER, MANAGER, AUDITOR, DIRECTOR
+                .requestMatchers(HttpMethod.GET, "/api/auth/users").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR")
 
                 // User profile by ID — any authenticated role can view/update own profile
                 .requestMatchers(HttpMethod.GET, "/api/auth/users/{userId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")

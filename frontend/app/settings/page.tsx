@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -175,23 +174,23 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="general" className="space-y-3">
-          <TabsList className={`grid w-full h-8 text-xs ${canUpdateSettings ? "grid-cols-6 lg:w-[600px]" : "grid-cols-5 lg:w-[500px]"}`}>
-            <TabsTrigger value="general" className="text-xs">General</TabsTrigger>
-            <TabsTrigger value="notifications" className="text-xs">Notifications</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs">Security</TabsTrigger>
-            <TabsTrigger value="integrations" className="text-xs">Integrations</TabsTrigger>
-            <TabsTrigger value="billing" className="text-xs">Billing</TabsTrigger>
-            {canUpdateSettings && <TabsTrigger value="scoring" className="text-xs">Scoring</TabsTrigger>}
+          <TabsList className={`grid w-full ${canUpdateSettings ? "grid-cols-6 lg:w-[600px]" : "grid-cols-5 lg:w-[500px]"}`}>
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
+            {canUpdateSettings && <TabsTrigger value="scoring">Scoring</TabsTrigger>}
           </TabsList>
           <TabsContent value="general" className="space-y-3">
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Company Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="company" className="text-xs">Company Name</Label>
@@ -226,17 +225,17 @@ export default function SettingsPage() {
                   Save
                 </Button>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <Globe className="h-4 w-4" />
                   Regional Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="language" className="text-xs">Language</Label>
@@ -257,19 +256,19 @@ export default function SettingsPage() {
                     <Input id="date-format" value={dateFormat} onChange={e => setDateFormat(e.target.value)} className="h-8 text-xs border-gray-200" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="notifications" className="space-y-3">
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <Bell className="h-4 w-4" />
                   Notification Preferences
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-xs">Email Notifications</Label>
@@ -331,19 +330,19 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="security" className="space-y-3">
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <Shield className="h-4 w-4" />
                   Security Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-xs">Two-Factor Authentication</Label>
@@ -364,16 +363,16 @@ export default function SettingsPage() {
                   <Label htmlFor="session" className="text-xs">Session Timeout (minutes)</Label>
                   <Input id="session" type="number" value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="h-8 text-xs border-gray-200 w-[120px]" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="integrations" className="space-y-3">
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700">System Integrations</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700">System Integrations</span>
+              </div>
+              <div className="p-4 space-y-3">
                 {[
                   { name: "Email (SMTP)", status: "Configured", desc: "Outbound email for notifications and password resets", color: "bg-emerald-100 text-emerald-700" },
                   { name: "Apache Kafka", status: "Active", desc: "Event streaming for real-time notifications", color: "bg-emerald-100 text-emerald-700" },
@@ -389,22 +388,22 @@ export default function SettingsPage() {
                     <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${color}`}>{status}</span>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="billing" className="space-y-3">
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-gray-100">
-                <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <CreditCard className="h-4 w-4" />
                   Billing Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="rounded-md bg-blue-50 border border-blue-100 p-3">
                   <p className="text-xs font-medium text-blue-800">Enterprise Plan</p>
-                  <p className="text-[11px] text-blue-600 mt-0.5">Unlimited users Â· All features Â· Priority support</p>
+                  <p className="text-[11px] text-blue-600 mt-0.5">Unlimited users · All features · Priority support</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div><p className="text-gray-500">Billing Cycle</p><p className="font-medium mt-0.5">Annual</p></div>
@@ -413,21 +412,21 @@ export default function SettingsPage() {
                   <div><p className="text-gray-500">Currency</p><p className="font-medium mt-0.5">{currency}</p></div>
                 </div>
                 <p className="text-[11px] text-gray-400">To update billing details, contact your account manager.</p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
-          {/* Scoring Weights â€â€ Admin only */}
+          {/* Scoring Weights — Admin only */}
           {canUpdateSettings && (
             <TabsContent value="scoring" className="space-y-3">
-              <Card className="border-0 shadow-sm">
-                <CardHeader className="py-3 px-4 border-b border-gray-100">
-                  <CardTitle className="text-sm font-medium text-gray-700">Vendor Scoring Weights</CardTitle>
+              <div className="border border-gray-200 rounded overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <span className="text-xs font-medium text-gray-700">Vendor Scoring Weights</span>
                   <p className="text-[11px] text-gray-500 mt-0.5">
                     Configure how each KPI contributes to the overall vendor score. Weights must sum to 100%.
                   </p>
-                </CardHeader>
-                <CardContent className="p-4">
+                </div>
+                <div className="p-4">
                   <form onSubmit={handleSaveWeights} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       {[
@@ -459,8 +458,8 @@ export default function SettingsPage() {
                     }`}>
                       <span className="font-medium">Total: {totalWeight.toFixed(0)}%</span>
                       {Math.abs(totalWeight - 100) < 0.01
-                        ? " âœâ€œ Valid"
-                        : ` â€â€ must equal 100% (${totalWeight > 100 ? "reduce" : "increase"} by ${Math.abs(100 - totalWeight).toFixed(0)}%)`}
+                        ? " ✓ Valid"
+                        : ` — must equal 100% (${totalWeight > 100 ? "reduce" : "increase"} by ${Math.abs(100 - totalWeight).toFixed(0)}%)`}
                     </div>
 
                     <Button
@@ -473,8 +472,8 @@ export default function SettingsPage() {
                       Save Weights
                     </Button>
                   </form>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
           )}
         </Tabs>

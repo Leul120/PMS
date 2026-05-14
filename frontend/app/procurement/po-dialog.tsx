@@ -153,19 +153,19 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-[560px] rounded">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-sm font-semibold">{isEditing ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
+          <DialogDescription className="text-xs">
             {isEditing
               ? "Update the details of this purchase order."
               : "Create a new purchase order linked to an RFQ and vendor."}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="rfqId">RFQ *</Label>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rfqId" className="text-xs font-medium">RFQ *</Label>
             {isEditing ? (
               <Input
                 id="rfqId"
@@ -180,7 +180,7 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
                 value={formData.rfqId}
                 onValueChange={handleRfqChange}
               >
-                <SelectTrigger id="rfqId">
+                <SelectTrigger id="rfqId" className="h-8 text-xs">
                   <SelectValue placeholder={loadingData ? "Loading..." : "Select an open RFQ"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -200,19 +200,20 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
                 placeholder={loadingData ? "Loading..." : "Enter RFQ ID"}
                 required
                 disabled={loadingData}
+                className="h-8 text-xs border-gray-200"
               />
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="vendorId">Vendor *</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="vendorId" className="text-xs font-medium">Vendor *</Label>
               {vendors.length > 0 ? (
                 <Select
                   value={formData.vendorId}
                   onValueChange={(v) => setFormData({ ...formData, vendorId: v })}
                 >
-                  <SelectTrigger id="vendorId">
+                  <SelectTrigger id="vendorId" className="h-8 text-xs">
                     <SelectValue placeholder={loadingData ? "Loading..." : "Select a vendor"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -232,12 +233,13 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
                   placeholder={loadingData ? "Loading..." : "Enter vendor ID"}
                   required={!isEditing}
                   disabled={loadingData}
+                  className="h-8 text-xs border-gray-200"
                 />
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="totalAmount">Total Amount ($) *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="totalAmount" className="text-xs font-medium">Total Amount ($) *</Label>
               <Input
                 id="totalAmount"
                 type="number"
@@ -246,29 +248,31 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
                 onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
                 placeholder="0.00"
                 required={!isEditing}
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="expectedDeliveryDate">Expected Delivery Date</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="expectedDeliveryDate" className="text-xs font-medium">Expected Delivery Date</Label>
             <Input
               id="expectedDeliveryDate"
               type="date"
               value={formData.expectedDeliveryDate}
               onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
           {!isEditing && (
-            <div className="space-y-2">
-              <Label htmlFor="bidId">Linked Bid (optional)</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="bidId" className="text-xs font-medium">Linked Bid (optional)</Label>
               {bids.length > 0 ? (
                 <Select
                   value={formData.bidId}
                   onValueChange={(v) => setFormData({ ...formData, bidId: v })}
                 >
-                  <SelectTrigger id="bidId">
+                  <SelectTrigger id="bidId" className="h-8 text-xs">
                     <SelectValue placeholder="Select a bid (optional)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -288,12 +292,12 @@ export function PODialog({ open, onOpenChange, onSuccess, initialData }: PODialo
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {isEditing ? "Save Changes" : "Create Purchase Order"}
             </Button>
           </DialogFooter>

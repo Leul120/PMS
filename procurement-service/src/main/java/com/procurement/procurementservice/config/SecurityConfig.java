@@ -50,9 +50,9 @@ public class SecurityConfig {
                 // GET purchase orders - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
                 .requestMatchers(HttpMethod.GET, "/api/purchase-orders", "/api/purchase-orders/**")
                     .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                // POST approve/reject purchase order - ADMIN, MANAGER
+                // POST approve/reject purchase order - ADMIN, MANAGER, DIRECTOR
                 .requestMatchers(HttpMethod.POST, "/api/purchase-orders/*/approve", "/api/purchase-orders/*/reject")
-                    .hasAnyRole("ADMIN", "MANAGER")
+                    .hasAnyRole("ADMIN", "MANAGER", "DIRECTOR")
                 // POST create purchase order - ADMIN, OFFICER
                 .requestMatchers(HttpMethod.POST, "/api/purchase-orders")
                     .hasAnyRole("ADMIN", "OFFICER")

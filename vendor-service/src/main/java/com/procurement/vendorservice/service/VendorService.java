@@ -130,6 +130,13 @@ public class VendorService {
             .map(this::mapToVendorResponse)
             .collect(Collectors.toList());
     }
+
+    public List<VendorResponse> getVendorsByIds(List<Long> vendorIds) {
+        if (vendorIds == null || vendorIds.isEmpty()) return List.of();
+        return vendorRepository.findAllById(vendorIds).stream()
+            .map(this::mapToVendorResponse)
+            .collect(Collectors.toList());
+    }
     
     public List<VendorCategoryResponse> getAllCategories() {
         return categoryRepository.findAll().stream()

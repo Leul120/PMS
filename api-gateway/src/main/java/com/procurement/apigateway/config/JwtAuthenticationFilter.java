@@ -55,7 +55,11 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return unauthorized(exchange.getResponse(), "Invalid or expired token");
         }
 
-        log.debug("Token validated at gateway, forwarding to services");
+        // Token is valid. Forward the original Authorization header as-is.
+        // Each downstream service has its own JwtAuthenticationFilter that validates
+        // the token a second time and extracts userId/role into the SecurityContext.
+        // No header injection needed — services never trust headers for identity.
+        log.debug("Token validated at gateway, forwarding to downstream service");
 
         return chain.filter(exchange);
     }

@@ -50,12 +50,9 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
     try {
       setLoadingPOs(true);
       const data = await poApi.getAllList();
-      const validPOs = data.filter((po: any) =>
-        ["APPROVED", "Approved"].includes(po.status)
-      );
-      setPurchaseOrders(validPOs);
+      setPurchaseOrders(data.filter((po: any) => ["APPROVED", "Approved"].includes(po.status)));
     } catch {
-      // silently fall back to manual entry
+      // fall back to manual entry
     } finally {
       setLoadingPOs(false);
     }
@@ -68,17 +65,12 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
       return;
     }
     setIsSubmitting(true);
-
     try {
-      // Find vendorId from the selected PO if not manually entered
       let vendorId = formData.vendorId ? parseInt(formData.vendorId) : undefined;
       if (!vendorId) {
-        const selectedPO = purchaseOrders.find(
-          (po: any) => String(po.poId || po.id) === formData.poId
-        );
+        const selectedPO = purchaseOrders.find((po: any) => String(po.poId || po.id) === formData.poId);
         vendorId = selectedPO?.vendorId;
       }
-
       await deliveryApi.create({
         poId: parseInt(formData.poId),
         vendorId: vendorId || 0,
@@ -88,14 +80,10 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
         issueNotes: formData.issueNotes || undefined,
         qualityRemarks: formData.qualityRemarks || undefined,
       });
-
-      toast({ title: "Delivery recorded", description: "Delivery has been recorded successfully." });
+      toast({ title: "Delivery recorded", description: "Delivery has been logged successfully." });
       onSuccess();
       onOpenChange(false);
-      setFormData({
-        poId: "", vendorId: "", expectedDate: "", actualDate: "",
-        quantityDelivered: "", issueNotes: "", qualityRemarks: "",
-      });
+      setFormData({ poId: "", vendorId: "", expectedDate: "", actualDate: "", quantityDelivered: "", issueNotes: "", qualityRemarks: "" });
     } catch (error) {
       toast({
         title: "Error",
@@ -109,29 +97,26 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[480px] rounded">
         <DialogHeader>
-          <DialogTitle>Record Delivery</DialogTitle>
-          <DialogDescription>
-            Record a delivery against an approved purchase order.
+          <DialogTitle className="text-sm font-semibold">Record Delivery</DialogTitle>
+          <DialogDescription className="text-xs">
+            Log a delivery against an approved purchase order.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="poId">Purchase Order *</Label>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="poId" className="text-xs font-medium">Purchase Order *</Label>
             {purchaseOrders.length > 0 ? (
-              <Select
-                value={formData.poId}
-                onValueChange={(v) => setFormData({ ...formData, poId: v })}
-              >
-                <SelectTrigger id="poId">
+              <Select value={formData.poId} onValueChange={(v) => setFormData({ ...formData, poId: v })}>
+                <SelectTrigger id="poId" className="h-8 text-xs">
                   <SelectValue placeholder={loadingPOs ? "Loading..." : "Select an approved PO"} />
                 </SelectTrigger>
                 <SelectContent>
                   {purchaseOrders.map((po: any) => (
                     <SelectItem key={po.poId || po.id} value={String(po.poId || po.id)}>
-                      {po.poNumber || `PO-${po.poId || po.id}`} ({po.status})
+                      {po.poNumber || `PO-${po.poId || po.id}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -145,12 +130,13 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
                 placeholder={loadingPOs ? "Loading..." : "Enter PO ID"}
                 required
                 disabled={loadingPOs}
+                className="h-8 text-xs border-gray-200"
               />
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="quantityDelivered">Quantity Delivered *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="quantityDelivered" className="text-xs font-medium">Quantity Delivered *</Label>
             <Input
               id="quantityDelivered"
               type="number"
@@ -158,56 +144,61 @@ export function DeliveryDialog({ open, onOpenChange, onSuccess, prefilledPoId }:
               onChange={(e) => setFormData({ ...formData, quantityDelivered: e.target.value })}
               placeholder="e.g. 100"
               required
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="expectedDate">Expected Date</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="expectedDate" className="text-xs font-medium">Expected Date</Label>
               <Input
                 id="expectedDate"
                 type="date"
                 value={formData.expectedDate}
                 onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
+                className="h-8 text-xs border-gray-200"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="actualDate">Actual Date</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="actualDate" className="text-xs font-medium">Actual Date</Label>
               <Input
                 id="actualDate"
                 type="date"
                 value={formData.actualDate}
                 onChange={(e) => setFormData({ ...formData, actualDate: e.target.value })}
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="issueNotes">Issue Notes</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="issueNotes" className="text-xs font-medium">Issue Notes</Label>
             <Input
               id="issueNotes"
               value={formData.issueNotes}
               onChange={(e) => setFormData({ ...formData, issueNotes: e.target.value })}
-              placeholder="Any delivery issues (optional)"
+              placeholder="Any delivery problems (optional)"
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="qualityRemarks">Quality Remarks</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="qualityRemarks" className="text-xs font-medium">Quality Remarks</Label>
             <Input
               id="qualityRemarks"
               value={formData.qualityRemarks}
               onChange={(e) => setFormData({ ...formData, qualityRemarks: e.target.value })}
               placeholder="Quality observations (optional)"
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Record Delivery
             </Button>
           </DialogFooter>

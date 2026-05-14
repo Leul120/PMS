@@ -54,6 +54,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/bids/*/award").hasAnyRole("ADMIN", "OFFICER")
                 // POST /api/bids (submit bid) - ADMIN, OFFICER, VENDOR
                 .requestMatchers(HttpMethod.POST, "/api/bids").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                // GET /api/bids/{id} - single bid detail - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
+                .requestMatchers(HttpMethod.GET, "/api/bids/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
                 // GET /api/bids/rfq/{id}/ranked - ADMIN, OFFICER, MANAGER, AUDITOR
                 .requestMatchers(HttpMethod.GET, "/api/bids/rfq/*/ranked").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
                 // GET /api/bids/rfq/{id}, /api/bids/vendor/{id} - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR

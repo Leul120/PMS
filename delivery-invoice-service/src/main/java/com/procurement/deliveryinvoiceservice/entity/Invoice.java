@@ -8,6 +8,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "invoice", indexes = {
     @Index(name = "idx_invoice_po_id", columnList = "poId"),
+    @Index(name = "idx_invoice_vendor_id", columnList = "vendorId"),
     @Index(name = "idx_invoice_status", columnList = "status"),
     @Index(name = "idx_invoice_discrepancy", columnList = "discrepancyFlag")
 })
@@ -17,6 +18,7 @@ public class Invoice {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long invoiceId;
     private Long poId;
+    private Long vendorId;
     private BigDecimal invoiceAmount;
     private String status;
     private LocalDate invoiceDate;

@@ -2,11 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
@@ -164,7 +161,7 @@ export default function AdminDashboardPage() {
   const handleResetPassword = async (userId: number, userName: string) => {
     try {
       setActionLoading(userId);
-      // Generate a temporary password and send to backend â€â€ do NOT display in toast
+      // Generate a temporary password and send to backend — do NOT display in toast
       const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(10)))
         .map(b => b.toString(36))
         .join('')
@@ -215,92 +212,123 @@ export default function AdminDashboardPage() {
   return (
     <RequireRole allowedRoles={["ADMIN"]}>
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-              <p className="text-muted-foreground">Manage users and assign roles</p>
+              <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
+              <p className="text-xs text-gray-500 mt-0.5">Manage user accounts and role assignments</p>
             </div>
-            <Button onClick={() => router.push('/users')}><Plus className="mr-2 h-4 w-4" /> Create User</Button>
+            <Button size="sm" className="text-xs h-8" onClick={() => router.push('/users')}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Create User
+            </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-5">
-            {ROLES.map(r => (
-              <Card key={r.value}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">{r.label}</CardTitle>{r.icon}
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{users.filter(u => u.roleName === r.value).length}</div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-3 md:grid-cols-5 divide-x divide-gray-200 border border-gray-200 rounded">
+            {ROLES.map(r => {
+              const count = users.filter(u => u.roleName === r.value).length;
+              return (
+                <div key={r.value} className="px-4 py-3">
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{r.label}</p>
+                  {loading ? <div className="h-5 w-8 bg-gray-100 rounded animate-pulse mt-1" /> : <p className="text-xl font-semibold text-gray-900 mt-1">{count}</p>}
+                </div>
+              );
+            })}
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Users</CardTitle>
-              <div className="flex items-center gap-2 pt-4">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-sm" />
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-medium text-gray-700">
+                System Users
+                {!loading && <span className="ml-2 text-[10px] font-normal text-gray-400">({filtered.length} shown)</span>}
+              </p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <Input
+                  placeholder="Search users..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-8 w-[200px] h-8 text-xs border-gray-200"
+                />
               </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div> : (
+            </div>
+            <div>
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-gray-500">No users found.</p>
+                </div>
+              ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">User</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Role</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2 text-right">Actions</TableHead>
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map(u => (
-                      <TableRow key={u.userId}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8"><AvatarFallback>{u.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}</AvatarFallback></Avatar>
-                            <div><div className="font-medium">{u.fullName}</div><div className="text-sm text-muted-foreground">{u.email}</div></div>
+                      <TableRow key={u.userId} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar className="h-7 w-7 shrink-0">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                {u.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-xs font-medium text-gray-900">{u.fullName}</p>
+                              <p className="text-[10px] text-gray-500">{u.email}</p>
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell><Badge className={ROLES.find(r => r.value === u.roleName)?.color}>{ROLES.find(r => r.value === u.roleName)?.label || u.roleName}</Badge></TableCell>
-                        <TableCell>{u.accountLocked ? <Badge variant="destructive"><Lock className="mr-1 h-3 w-3" /> Locked</Badge> : <Badge variant="default"><Unlock className="mr-1 h-3 w-3" /> Active</Badge>}</TableCell>
-                        <TableCell>
+                        <TableCell className="py-2.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${ROLES.find(r => r.value === u.roleName)?.color}`}>
+                            {ROLES.find(r => r.value === u.roleName)?.label || u.roleName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-2.5">
+                          {u.accountLocked ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
+                              <Lock className="h-2.5 w-2.5" />Locked
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                              <Unlock className="h-2.5 w-2.5" />Active
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2.5 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" disabled={actionLoading === u.userId}>
-                                {actionLoading === u.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={actionLoading === u.userId}>
+                                {actionLoading === u.userId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Manage User</DropdownMenuLabel>
+                            <DropdownMenuContent align="end" className="text-xs">
+                              <DropdownMenuLabel className="text-xs">Manage User</DropdownMenuLabel>
                               <DropdownMenuSeparator />
                               {ROLES.filter(r => r.value !== u.roleName).map(r => (
-                                <DropdownMenuItem
-                                  key={r.value}
-                                  onClick={() => handleAssignRole(u.userId, r.value, u.fullName)}
-                                  disabled={actionLoading === u.userId}
-                                >
-                                  <Shield className="mr-2 h-4 w-4" /> Make {r.label}
+                                <DropdownMenuItem key={r.value} className="text-xs" onClick={() => handleAssignRole(u.userId, r.value, u.fullName)} disabled={actionLoading === u.userId}>
+                                  <Shield className="mr-2 h-3.5 w-3.5" />Make {r.label}
                                 </DropdownMenuItem>
                               ))}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleToggleLock(u.userId, u.accountLocked, u.fullName)}
-                                disabled={actionLoading === u.userId}
-                              >
-                                {u.accountLocked ? <><Unlock className="mr-2 h-4 w-4" /> Unlock Account</> : <><Lock className="mr-2 h-4 w-4" /> Lock Account</>}
+                              <DropdownMenuItem className="text-xs" onClick={() => handleToggleLock(u.userId, u.accountLocked, u.fullName)} disabled={actionLoading === u.userId}>
+                                {u.accountLocked ? <><Unlock className="mr-2 h-3.5 w-3.5" />Unlock Account</> : <><Lock className="mr-2 h-3.5 w-3.5" />Lock Account</>}
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleResetPassword(u.userId, u.fullName)}
-                                disabled={actionLoading === u.userId}
-                              >
-                                <Key className="mr-2 h-4 w-4" /> Reset Password
+                              <DropdownMenuItem className="text-xs" onClick={() => handleResetPassword(u.userId, u.fullName)} disabled={actionLoading === u.userId}>
+                                <Key className="mr-2 h-3.5 w-3.5" />Reset Password
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-red-600"
-                                onClick={() => handleDeleteUser(u.userId, u.fullName)}
-                                disabled={actionLoading === u.userId}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete User
+                              <DropdownMenuItem className="text-xs text-red-600" onClick={() => handleDeleteUser(u.userId, u.fullName)} disabled={actionLoading === u.userId}>
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />Delete User
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -310,17 +338,17 @@ export default function AdminDashboardPage() {
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Reset Password Dialog */}
         <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-          <DialogContent className="sm:max-w-[400px]">
+          <DialogContent className="sm:max-w-[400px] rounded">
             <DialogHeader>
               <DialogTitle>Password Reset</DialogTitle>
               <DialogDescription>
-                Temporary password for <strong>{resetUserName}</strong>. Share this securely â€â€ it will not be shown again.
+                Temporary password for <strong>{resetUserName}</strong>. Share this securely — it will not be shown again.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
@@ -348,7 +376,7 @@ export default function AdminDashboardPage() {
 
         {/* Delete Confirm Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <DialogContent className="sm:max-w-[400px]">
+          <DialogContent className="sm:max-w-[400px] rounded">
             <DialogHeader>
               <DialogTitle>Delete User</DialogTitle>
               <DialogDescription>

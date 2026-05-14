@@ -39,11 +39,12 @@ public class DataInitializer implements CommandLineRunner {
 
     private void initRoles() {
         if (roleRepository.count() == 0) {
-            createRole(1L, "ADMIN",   "MANAGE_USERS,VIEW_AUDIT,MANAGE_ROLES,MANAGE_RFQ,MANAGE_VENDOR,VIEW_REPORTS,APPROVE_PO,VIEW_COMPLIANCE,MANAGE_INVENTORY,MANAGE_SETTINGS");
-            createRole(2L, "OFFICER", "MANAGE_RFQ,MANAGE_VENDOR,VIEW_REPORTS,EVALUATE_BID,CREATE_PO,VALIDATE_INVOICE,MANAGE_DELIVERY,MANAGE_INVENTORY,VIEW_USERS");
-            createRole(3L, "MANAGER", "APPROVE_PO,CREATE_PO,VIEW_REPORTS,VIEW_VENDOR,VIEW_RFQ,VIEW_INVOICE,VIEW_DELIVERY,VIEW_INVENTORY,VIEW_USERS");
-            createRole(4L, "VENDOR",  "SUBMIT_BID,VIEW_RFQ,SUBMIT_INVOICE,RECORD_DELIVERY,VIEW_OWN_DATA");
-            createRole(5L, "AUDITOR", "VIEW_AUDIT,VIEW_REPORTS,VIEW_COMPLIANCE,READ_ALL,VIEW_USERS");
+            createRole(1L, "ADMIN",    "MANAGE_USERS,VIEW_AUDIT,MANAGE_ROLES,MANAGE_RFQ,MANAGE_VENDOR,VIEW_REPORTS,APPROVE_PO,VIEW_COMPLIANCE,MANAGE_INVENTORY,MANAGE_SETTINGS");
+            createRole(2L, "OFFICER",  "MANAGE_RFQ,MANAGE_VENDOR,VIEW_REPORTS,EVALUATE_BID,CREATE_PO,VALIDATE_INVOICE,MANAGE_DELIVERY,MANAGE_INVENTORY,VIEW_USERS");
+            createRole(3L, "MANAGER",  "APPROVE_PO,CREATE_PO,VIEW_REPORTS,VIEW_VENDOR,VIEW_RFQ,VIEW_INVOICE,VIEW_DELIVERY,VIEW_INVENTORY,VIEW_USERS");
+            createRole(4L, "VENDOR",   "SUBMIT_BID,VIEW_RFQ,SUBMIT_INVOICE,RECORD_DELIVERY,VIEW_OWN_DATA");
+            createRole(5L, "AUDITOR",  "VIEW_AUDIT,VIEW_REPORTS,VIEW_COMPLIANCE,READ_ALL,VIEW_USERS");
+            createRole(6L, "DIRECTOR", "APPROVE_PO,VIEW_REPORTS,VIEW_VENDOR,VIEW_RFQ,VIEW_INVOICE,VIEW_DELIVERY,VIEW_INVENTORY,VIEW_USERS,MANAGE_SETTINGS");
             log.info("Roles initialized");
         }
     }
@@ -60,32 +61,40 @@ public class DataInitializer implements CommandLineRunner {
 
     private void initUsers() {
         if (userRepository.count() <= 1) {   // only admin exists (or none)
-            Role adminRole   = roleRepository.findByRoleName("ADMIN").orElseThrow();
-            Role officerRole = roleRepository.findByRoleName("OFFICER").orElseThrow();
-            Role managerRole = roleRepository.findByRoleName("MANAGER").orElseThrow();
-            Role vendorRole  = roleRepository.findByRoleName("VENDOR").orElseThrow();
-            Role auditorRole = roleRepository.findByRoleName("AUDITOR").orElseThrow();
+            Role adminRole    = roleRepository.findByRoleName("ADMIN").orElseThrow();
+            Role officerRole  = roleRepository.findByRoleName("OFFICER").orElseThrow();
+            Role managerRole  = roleRepository.findByRoleName("MANAGER").orElseThrow();
+            Role vendorRole   = roleRepository.findByRoleName("VENDOR").orElseThrow();
+            Role auditorRole  = roleRepository.findByRoleName("AUDITOR").orElseThrow();
+            Role directorRole = roleRepository.findByRoleName("DIRECTOR").orElseThrow();
 
             // Admin
-            createUserIfAbsent("System Administrator",  "admin@procurement.com",    "+1-555-0100", "admin123",   adminRole,   LocalDateTime.now().minusDays(90));
+            createUserIfAbsent("System Administrator",  "admin@procurement.com",    "+1-555-0100", "admin123",    adminRole,    LocalDateTime.now().minusDays(90));
 
             // Procurement Officers
-            createUserIfAbsent("Alice Johnson",         "alice@procurement.com",    "+1-555-0101", "officer123", officerRole, LocalDateTime.now().minusDays(80));
-            createUserIfAbsent("Bob Martinez",          "bob@procurement.com",      "+1-555-0102", "officer123", officerRole, LocalDateTime.now().minusDays(75));
+            createUserIfAbsent("Alice Johnson",         "alice@procurement.com",    "+1-555-0101", "officer123",  officerRole,  LocalDateTime.now().minusDays(80));
+            createUserIfAbsent("Bob Martinez",          "bob@procurement.com",      "+1-555-0102", "officer123",  officerRole,  LocalDateTime.now().minusDays(75));
 
             // Managers
-            createUserIfAbsent("Carol Williams",        "carol@procurement.com",    "+1-555-0201", "manager123", managerRole, LocalDateTime.now().minusDays(70));
-            createUserIfAbsent("David Chen",            "david@procurement.com",    "+1-555-0202", "manager123", managerRole, LocalDateTime.now().minusDays(65));
+            createUserIfAbsent("Carol Williams",        "carol@procurement.com",    "+1-555-0201", "manager123",  managerRole,  LocalDateTime.now().minusDays(70));
+            createUserIfAbsent("David Chen",            "david@procurement.com",    "+1-555-0202", "manager123",  managerRole,  LocalDateTime.now().minusDays(65));
 
             // Vendors (user accounts linked to vendor profiles)
-            createUserIfAbsent("TechSupply Corp",       "vendor1@techsupply.com",   "+1-555-0301", "vendor123",  vendorRole,  LocalDateTime.now().minusDays(60));
-            createUserIfAbsent("BuildRight Ltd",        "vendor2@buildright.com",   "+1-555-0302", "vendor123",  vendorRole,  LocalDateTime.now().minusDays(55));
-            createUserIfAbsent("OfficeEssentials Inc",  "vendor3@officeess.com",    "+1-555-0303", "vendor123",  vendorRole,  LocalDateTime.now().minusDays(50));
-            createUserIfAbsent("ElectroWorld Co",       "vendor4@electroworld.com", "+1-555-0304", "vendor123",  vendorRole,  LocalDateTime.now().minusDays(45));
-            createUserIfAbsent("FurniturePlus LLC",     "vendor5@furnitureplus.com","+1-555-0305", "vendor123",  vendorRole,  LocalDateTime.now().minusDays(40));
+            // IMPORTANT: these must be created before Director so they get sequential IDs 6-10.
+            // vendor-service, notification-service, and delivery-invoice-service all depend on
+            // vendor userIds being: TechSupply=6, BuildRight=7, OfficeEssentials=8,
+            //                       ElectroWorld=9, FurniturePlus=10
+            createUserIfAbsent("TechSupply Corp",       "vendor1@techsupply.com",   "+1-555-0301", "vendor123",   vendorRole,   LocalDateTime.now().minusDays(60));
+            createUserIfAbsent("BuildRight Ltd",        "vendor2@buildright.com",   "+1-555-0302", "vendor123",   vendorRole,   LocalDateTime.now().minusDays(55));
+            createUserIfAbsent("OfficeEssentials Inc",  "vendor3@officeess.com",    "+1-555-0303", "vendor123",   vendorRole,   LocalDateTime.now().minusDays(50));
+            createUserIfAbsent("ElectroWorld Co",       "vendor4@electroworld.com", "+1-555-0304", "vendor123",   vendorRole,   LocalDateTime.now().minusDays(45));
+            createUserIfAbsent("FurniturePlus LLC",     "vendor5@furnitureplus.com","+1-555-0305", "vendor123",   vendorRole,   LocalDateTime.now().minusDays(40));
 
-            // Auditors
-            createUserIfAbsent("Eve Thompson",          "eve@procurement.com",      "+1-555-0401", "auditor123", auditorRole, LocalDateTime.now().minusDays(35));
+            // Auditors (userId=11)
+            createUserIfAbsent("Eve Thompson",          "eve@procurement.com",      "+1-555-0401", "auditor123",  auditorRole,  LocalDateTime.now().minusDays(35));
+
+            // Director (userId=12) — created last; other services do not reference this userId
+            createUserIfAbsent("Frank Director",        "director@procurement.com", "+1-555-0250", "director123", directorRole, LocalDateTime.now().minusDays(60));
 
             log.info("Seed users created");
         }

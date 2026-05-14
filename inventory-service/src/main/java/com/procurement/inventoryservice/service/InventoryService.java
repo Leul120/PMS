@@ -1,5 +1,6 @@
 package com.procurement.inventoryservice.service;
 
+import com.procurement.inventoryservice.dto.InventoryItemRequest;
 import com.procurement.inventoryservice.dto.PagedResponse;
 import com.procurement.inventoryservice.entity.InventoryItem;
 import com.procurement.inventoryservice.repository.InventoryRepository;
@@ -40,24 +41,34 @@ public class InventoryService {
     }
 
     @Transactional
-    public InventoryItem createItem(InventoryItem item) {
-        if (inventoryRepository.findByItemCode(item.getItemCode()).isPresent()) {
-            throw new RuntimeException("Item code already exists: " + item.getItemCode());
+    public InventoryItem createItem(InventoryItemRequest request) {
+        if (inventoryRepository.findByItemCode(request.getItemCode()).isPresent()) {
+            throw new RuntimeException("Item code already exists: " + request.getItemCode());
         }
+        InventoryItem item = new InventoryItem();
+        item.setItemCode(request.getItemCode());
+        item.setName(request.getName());
+        item.setDescription(request.getDescription());
+        item.setQuantity(request.getQuantity());
+        item.setMinStock(request.getMinStock());
+        item.setMaxStock(request.getMaxStock());
+        item.setUnit(request.getUnit());
+        item.setLocation(request.getLocation());
+        item.setCategory(request.getCategory());
         return inventoryRepository.save(item);
     }
 
     @Transactional
-    public InventoryItem updateItem(Long id, InventoryItem itemDetails) {
+    public InventoryItem updateItem(Long id, InventoryItemRequest request) {
         InventoryItem item = getItemById(id);
-        item.setName(itemDetails.getName());
-        item.setDescription(itemDetails.getDescription());
-        item.setQuantity(itemDetails.getQuantity());
-        item.setMinStock(itemDetails.getMinStock());
-        item.setMaxStock(itemDetails.getMaxStock());
-        item.setUnit(itemDetails.getUnit());
-        item.setLocation(itemDetails.getLocation());
-        item.setCategory(itemDetails.getCategory());
+        item.setName(request.getName());
+        item.setDescription(request.getDescription());
+        item.setQuantity(request.getQuantity());
+        item.setMinStock(request.getMinStock());
+        item.setMaxStock(request.getMaxStock());
+        item.setUnit(request.getUnit());
+        item.setLocation(request.getLocation());
+        item.setCategory(request.getCategory());
         return inventoryRepository.save(item);
     }
 

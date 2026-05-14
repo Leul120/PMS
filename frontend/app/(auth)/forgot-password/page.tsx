@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,7 +56,7 @@ export default function ForgotPasswordPage() {
             <p className="text-sm text-primary-foreground/80">
               Enter your email and we&apos;ll send you reset instructions.
             </p>
-            
+
             <div className="flex flex-col gap-2 pt-2 text-xs">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center font-medium">1</div>
@@ -91,17 +90,13 @@ export default function ForgotPasswordPage() {
             <span className="text-lg font-semibold">ProcurePro</span>
           </div>
 
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-lg font-semibold text-center">
-                Reset password
-              </CardTitle>
-              <CardDescription className="text-center text-xs text-gray-500">
-                Enter your email for reset instructions
-              </CardDescription>
-            </CardHeader>
+          <div className="border border-gray-200 rounded bg-white">
+            <div className="px-6 pt-5 pb-4 text-center space-y-1">
+              <h2 className="text-base font-semibold text-gray-900">Reset password</h2>
+              <p className="text-xs text-gray-500">Enter your email for reset instructions</p>
+            </div>
 
-            <CardContent>
+            <div className="px-6 pb-6">
               {!isSubmitted ? (
                 <form onSubmit={handleSubmit} className="space-y-3">
                   <div className="space-y-1.5">
@@ -175,8 +170,8 @@ export default function ForgotPasswordPage() {
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           <p className="mt-6 text-center text-[10px] text-gray-400">
             Remember your password?{" "}

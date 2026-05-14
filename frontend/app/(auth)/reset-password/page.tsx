@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,19 +65,19 @@ function ResetPasswordForm() {
           <span className="text-lg font-semibold">ProcurePro</span>
         </div>
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-lg font-semibold text-center">
+        <div className="border border-gray-200 rounded bg-white">
+          <div className="px-6 pt-5 pb-4 text-center space-y-1">
+            <h2 className="text-base font-semibold text-gray-900">
               {isSuccess ? "Password Reset!" : "Set New Password"}
-            </CardTitle>
-            <CardDescription className="text-center text-xs text-gray-500">
+            </h2>
+            <p className="text-center text-xs text-gray-500">
               {isSuccess
                 ? "Your password has been updated. Redirecting to login..."
                 : "Enter your new password below."}
-            </CardDescription>
-          </CardHeader>
+            </p>
+          </div>
 
-          <CardContent>
+          <div className="px-6 pb-6">
             {isSuccess ? (
               <div className="flex flex-col items-center gap-3 py-4">
                 <CheckCircle2 className="h-12 w-12 text-emerald-500" />
@@ -166,8 +165,8 @@ function ResetPasswordForm() {
                 </p>
               </form>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

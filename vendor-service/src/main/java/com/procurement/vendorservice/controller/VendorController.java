@@ -59,6 +59,11 @@ public class VendorController {
         return ResponseEntity.ok(vendorService.getVendorsByStatus(status));
     }
 
+    @PostMapping("/batch")
+    public ResponseEntity<List<VendorResponse>> getVendorsByIds(@RequestBody List<Long> vendorIds) {
+        return ResponseEntity.ok(vendorService.getVendorsByIds(vendorIds));
+    }
+
     @GetMapping("/categories")
     public ResponseEntity<List<VendorCategoryResponse>> getAllCategories() {
         return ResponseEntity.ok(vendorService.getAllCategories());

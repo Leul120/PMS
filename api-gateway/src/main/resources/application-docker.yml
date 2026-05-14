@@ -95,7 +95,6 @@ spring:
             exposedHeaders:
               - Authorization
               - Content-Type
-              - X-User-Id
             maxAge: 3600
 
 logging:

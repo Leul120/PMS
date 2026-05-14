@@ -5,6 +5,7 @@ import com.procurement.analyticsservice.infrastructure.client.RFQClient;
 import com.procurement.analyticsservice.infrastructure.client.VendorClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
@@ -26,6 +27,7 @@ public class AnalyticsController {
     // ── Spend Report ──────────────────────────────────────────────────────────
 
     @GetMapping("/reports/spend")
+    @Cacheable(value = "spendingReports", key = "'spend-report'")
     public Mono<ResponseEntity<Map<String, Object>>> getSpendReport() {
         return procurementClient.getPurchaseOrders().map(purchaseOrders -> {
             double totalSpend = purchaseOrders.stream()
@@ -130,6 +132,7 @@ public class AnalyticsController {
     // ── Compliance Report ─────────────────────────────────────────────────────
 
     @GetMapping("/reports/compliance")
+    @Cacheable(value = "vendorAnalytics", key = "'compliance-report'")
     public Mono<ResponseEntity<Map<String, Object>>> getComplianceReport() {
         return vendorClient.getVendors().map(vendors -> {
             long total = vendors.size();
@@ -176,6 +179,7 @@ public class AnalyticsController {
     // ── Dashboard Overview ────────────────────────────────────────────────────
 
     @GetMapping("/dashboard/overview")
+    @Cacheable(value = "procurementMetrics", key = "'dashboard-overview'")
     public Mono<ResponseEntity<Map<String, Object>>> getDashboardOverview() {
         return Mono.zip(
             vendorClient.getVendors(),

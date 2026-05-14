@@ -62,15 +62,6 @@ function getToken(): string | null {
   return token;
 }
 
-function getUserId(): string | null {
-  const user = getStoredState().user;
-  if (!user) return null;
-  const raw = user.id || user.userId;
-  if (!raw && raw !== 0) return null;
-  const str = String(raw);
-  return str.trim() !== '' ? str : null;
-}
-
 // ── Auth error handler ────────────────────────────────────────────────────────
 
 function handleAuthError() {
@@ -82,6 +73,8 @@ function handleAuthError() {
 }
 
 // ── Generic fetch wrapper ─────────────────────────────────────────────────────
+
+const FETCH_TIMEOUT_MS = 30_000; // 30 seconds
 
 async function fetchApi<T>(
   endpoint: string,
@@ -97,11 +90,16 @@ async function fetchApi<T>(
 
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const userId = getUserId();
-  if (userId) headers['X-User-Id'] = userId;
+  // NOTE: X-User-Id is intentionally NOT sent here.
+  // The API Gateway extracts userId from the validated JWT and injects
+  // X-Authenticated-User-Id as a trusted header. Any client-supplied
+  // X-User-Id is stripped by the gateway to prevent spoofing.
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...options, headers, signal: controller.signal });
 
     if (response.status === 401) {
       handleAuthError();
@@ -146,10 +144,15 @@ async function fetchApi<T>(
 
     return response.json();
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out. The server took too long to respond.');
+    }
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Network error. Please check your connection and try again.');
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -438,6 +441,11 @@ export const deliveryApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  updateStatus: (deliveryId: string | number, status: string) =>
+    fetchApi(`/deliveries/${deliveryId}/status?status=${encodeURIComponent(status)}`, {
+      method: 'PUT',
+    }),
 };
 
 // ── Invoice APIs ──────────────────────────────────────────────────────────────
@@ -447,6 +455,8 @@ export const invoiceApi = {
   getAll: () =>
     fetchApi<PagedResponse<any> | any[]>('/invoices?page=0&size=200').then(unwrapPage),
   getByPO: (poId: string | number) => fetchApi<any[]>(`/invoices/po/${poId}`),
+  /** Vendor-specific endpoint — avoids N+1 of fetching per PO */
+  getByVendor: (vendorId: string | number) => fetchApi<any[]>(`/invoices/vendor/${vendorId}`),
 
   /** Backend accepts JSON body (InvoiceRequest) */
   create: (data: {
@@ -476,9 +486,13 @@ export const invoiceApi = {
 export const scoringApi = {
   getRanking: () => fetchApi<any[]>('/scores/ranking'),
   getByVendor: (vendorId: string | number) => fetchApi<any[]>(`/scores/vendor/${vendorId}`),
-  /** Returns a plain string message, not JSON */
+  /** Returns individual KPI breakdown + overall score + risk level */
+  getPerformance: (vendorId: string | number) => fetchApi<any>(`/scores/vendor/${vendorId}/performance`),
+  /** Triggers recalculation and returns the updated score */
   calculate: (vendorId: string | number) =>
-    fetchApi<string>(`/scores/calculate/${vendorId}`, { method: 'POST' }),
+    fetchApi<{ message: string; vendorId: number; overallScore?: number; riskLevel?: string }>(
+      `/scores/calculate/${vendorId}`, { method: 'POST' }
+    ),
 };
 // ── Analytics APIs ────────────────────────────────────────────────────────────
 
@@ -659,7 +673,8 @@ export async function getVendorNameMap(): Promise<Map<string, string>> {
         const name = v.companyName || v.name || v.vendorName || '';
         if (id && name) map.set(id, name);
       });
-      _vendorCache = map;
+      if (map.size > 0) _vendorCache = map;
+      else _vendorCachePromise = null;
       return map;
     })
     .catch(() => {
@@ -691,7 +706,8 @@ export async function getCategoryNameMap(): Promise<Map<string, string>> {
         const name = c.categoryName || c.name || '';
         if (id && name) map.set(id, name);
       });
-      _categoryCache = map;
+      if (map.size > 0) _categoryCache = map;
+      else _categoryCachePromise = null;
       return map;
     })
     .catch(() => {

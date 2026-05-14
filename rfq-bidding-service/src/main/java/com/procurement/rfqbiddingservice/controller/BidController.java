@@ -21,6 +21,11 @@ public class BidController {
         return ResponseEntity.ok(rfqService.submitBid(request));
     }
 
+    @GetMapping("/{bidId}")
+    public ResponseEntity<BidResponse> getBidById(@PathVariable Long bidId) {
+        return ResponseEntity.ok(rfqService.getBidById(bidId));
+    }
+
     @GetMapping("/rfq/{rfqId}")
     public ResponseEntity<List<BidResponse>> getBidsByRFQ(@PathVariable Long rfqId) {
         return ResponseEntity.ok(rfqService.getBidsByRFQ(rfqId));

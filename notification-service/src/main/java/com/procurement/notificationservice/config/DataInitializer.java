@@ -26,149 +26,335 @@ public class DataInitializer implements CommandLineRunner {
     private void initNotifications() {
         // User IDs from auth-service seed:
         //   admin=1, alice(officer)=2, bob(officer)=3, carol(manager)=4,
-        //   david(manager)=5, vendor1=6, vendor2=7, vendor3=8, vendor4=9, vendor5=10, eve(auditor)=11
-        // RFQ IDs: 1=Laptops, 2=Furniture, 3=Stationery, 4=ServerRoom, 5=Network
-        // PO IDs:  1=Approved, 2=Dispatched, 3=PendingApproval, 4=Draft, 5=Closed
+        //   david(manager)=5, vendor1(TechSupply)=6, vendor2(BuildRight)=7,
+        //   vendor3(OfficeEssentials)=8, vendor4(ElectroWorld)=9, vendor5(FurniturePlus)=10,
+        //   eve(auditor)=11, frank(director)=12
+        // RFQ IDs: 1=Laptops, 2=Furniture, 3=AnnualStationery, 4=ServerRoom, 5=Network,
+        //          6=StationeryQ1, 7=ITSecurity
+        // PO IDs:  1=Closed, 2=Dispatched, 3=PendingApproval, 4=Approved, 5=Closed(dispute)
 
         LocalDateTime now = LocalDateTime.now();
 
-        // ── Bid deadline reminders (for officers) ─────────────────────────────
-        createNotification(2L, "IN_APP", "Bid Deadline Approaching",
-                "RFQ 'Laptop Procurement Q3 2025' closes in 24 hours. Review submitted bids.",
+        // ═══════════════════════════════════════════════════════════════════════
+        // BID DEADLINE REMINDERS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Bid deadline for Laptop RFQ — alice must evaluate bids
+        notif(2L, "IN_APP", "Bid Deadline Approaching – Laptop Procurement",
+                "RFQ 'Laptop Procurement Q3 2025' closes in 24 hours. 3 bids received. " +
+                "Review and select preferred vendor before deadline.",
                 "SENT", "BID_DEADLINE", "1", now.minusHours(24), now.minusHours(24), null);
 
-        createNotification(3L, "IN_APP", "Bid Deadline Approaching",
-                "RFQ 'Network Equipment Upgrade' closes in 24 hours. 2 bids received.",
+        // Bid deadline for Network Equipment — bob
+        notif(3L, "IN_APP", "Bid Deadline Approaching – Network Equipment",
+                "RFQ 'Network Equipment Upgrade' closes in 24 hours. 3 bids received. " +
+                "ElectroWorld Co leads on price and technical fit.",
                 "SENT", "BID_DEADLINE", "5", now.minusHours(10), now.minusHours(10), null);
 
-        // ── Approval pending (for managers) ───────────────────────────────────
-        createNotification(5L, "IN_APP", "Purchase Order Awaiting Approval",
-                "PO #3 for Office Furniture (FurniturePlus LLC, $42,000) requires your approval.",
+        // RFQ 3 (Annual Stationery) closed — alice must action bid evaluation
+        notif(3L, "EMAIL", "RFQ Closed – Action Required",
+                "RFQ 'Annual Stationery Supply Contract' has closed with 3 bids received. " +
+                "Please evaluate bids and select a winner to proceed to PO creation.",
+                "SENT", "BID_DEADLINE", "3", now.minusDays(5), now.minusDays(5), null);
+
+        // IT Security RFQ opened — TechSupply notified (their category)
+        notif(6L, "IN_APP", "New RFQ Available – IT Security Software",
+                "A new RFQ 'IT Security Software Licensing' (RFQ #7) matching your IT category " +
+                "is open for bidding. Deadline: 20 days. Estimated value: $28,000.",
+                "SENT", "BID_DEADLINE", "7", now.minusDays(5), now.minusDays(5), null);
+
+        // ElectroWorld notified about Network Equipment RFQ
+        notif(9L, "IN_APP", "New RFQ Available – Network Equipment Upgrade",
+                "A new RFQ 'Network Equipment Upgrade' (RFQ #5) matching your Electronics category " +
+                "is open for bidding. Deadline: 12 days. Estimated value: $35,000.",
+                "SENT", "BID_DEADLINE", "5", now.minusDays(8), now.minusDays(8), null);
+
+        // FurniturePlus notified about Furniture RFQ
+        notif(10L, "IN_APP", "New RFQ Available – Office Furniture Refresh",
+                "A new RFQ 'Office Furniture Refresh 2025' (RFQ #2) matching your Furniture category " +
+                "is open for bidding. Deadline: 18 days. Estimated value: $45,000.",
+                "READ", "BID_DEADLINE", "2", now.minusDays(12), now.minusDays(12), now.minusDays(11));
+
+        // OfficeEssentials notified about Laptop RFQ (they submitted a bid)
+        notif(8L, "IN_APP", "New RFQ Available – Laptop Procurement",
+                "A new RFQ 'Laptop Procurement Q3 2025' (RFQ #1) is open for bidding. " +
+                "Your bid has been successfully submitted.",
+                "READ", "BID_DEADLINE", "1", now.minusDays(18), now.minusDays(18), now.minusDays(17));
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // APPROVAL PENDING
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // David (manager) — PO #3 Furniture awaiting his approval
+        notif(5L, "IN_APP", "Purchase Order Awaiting Approval – PO #3",
+                "PO #3 for Office Furniture Refresh (FurniturePlus LLC, $42,000) requires your approval. " +
+                "Standing desks are out of stock and blocking the new HQ setup.",
                 "SENT", "APPROVAL_PENDING", "3", now.minusDays(3), now.minusDays(3), null);
 
-        createNotification(5L, "IN_APP", "Purchase Requisition Pending Review",
-                "PR-2025-003 (Network Equipment, $35,000) submitted by Alice Johnson awaits approval.",
-                "SENT", "APPROVAL_PENDING", "PR-2025-003", now.minusDays(5), now.minusDays(5), null);
+        // David (manager) — PR-2025-003 Network Equipment pending his review
+        notif(5L, "IN_APP", "Purchase Requisition Pending Review – PR-2025-003",
+                "PR-2025-003 (Network Equipment Upgrade, $35,000) submitted by Alice Johnson awaits " +
+                "your approval. 3 switches, 10 APs, and 2 routers requested.",
+                "SENT", "APPROVAL_PENDING", "3", now.minusDays(5), now.minusDays(5), null);
 
-        // ── Delivery updates ──────────────────────────────────────────────────
-        createNotification(2L, "IN_APP", "Order Dispatched",
-                "PO #2 (Stationery Supply) has been dispatched by OfficeEssentials Inc. Expected delivery in 5 days.",
+        // David (manager) — PR-2025-007 Conference room pending his review
+        notif(5L, "IN_APP", "Purchase Requisition Pending Review – PR-2025-007",
+                "PR-2025-007 (Conference Room AV Upgrade, $22,000) submitted by Bob Martinez " +
+                "awaits your approval. Boardroom projector and sound system replacement.",
+                "SENT", "APPROVAL_PENDING", "7", now.minusDays(1), now.minusDays(1), null);
+
+        // Carol (manager) — PO #4 Laptops approved email confirmation
+        notif(4L, "EMAIL", "PO #4 Approved – Laptop Procurement",
+                "Purchase Order #4 for Laptop Procurement (TechSupply Corp, $72,000) has been approved. " +
+                "Expected delivery in 14 days. Vendor has been notified.",
+                "READ", "APPROVAL_PENDING", "4", now.minusDays(4), now.minusDays(4), now.minusDays(3));
+
+        // Carol (manager) — PO #1 Server Room high-value approval email (historical)
+        notif(4L, "EMAIL", "High-Value PO Approved – PO #1 ($115,000)",
+                "Purchase Order #1 for Server Room Renovation (BuildRight Ltd, $115,000) has been " +
+                "approved and issued. Vendor project timeline: 45 days. Expected completion: on schedule.",
+                "READ", "APPROVAL_PENDING", "1", now.minusDays(54), now.minusDays(54), now.minusDays(53));
+
+        // Carol (manager) — PO #3 Furniture urgent email
+        notif(4L, "EMAIL", "PO #3 Awaiting Your Approval – Urgent",
+                "PO #3 for Office Furniture Refresh (FurniturePlus LLC, $42,000) has been pending " +
+                "approval for 3 days. Standing desks are out of stock — new HQ setup is blocked.",
+                "SENT", "APPROVAL_PENDING", "3", now.minusDays(3), now.minusDays(3), null);
+
+        // Director (frank, userId=12) — high-value PO #1 awareness notification
+        notif(12L, "IN_APP", "High-Value Purchase Order Issued – PO #1",
+                "PO #1 for Server Room Renovation (BuildRight Ltd, $115,000) has been approved " +
+                "by Carol Williams. Project completed successfully. Invoice paid.",
+                "READ", "APPROVAL_PENDING", "1", now.minusDays(52), now.minusDays(52), now.minusDays(50));
+
+        // Director — PO #4 Laptops awareness (above threshold)
+        notif(12L, "IN_APP", "High-Value Purchase Order Approved – PO #4",
+                "PO #4 for Laptop Procurement (TechSupply Corp, $72,000) approved by Carol Williams. " +
+                "Delivery expected in 14 days.",
+                "READ", "APPROVAL_PENDING", "4", now.minusDays(4), now.minusDays(4), now.minusDays(3));
+
+        // Director — monthly spend report
+        notif(12L, "EMAIL", "Monthly Procurement Spend Report – April 2025",
+                "Total procurement spend this month: $198,000 across 4 active POs. " +
+                "Largest: PO #1 Server Room Renovation ($115,000). Budget utilisation: 76%. " +
+                "Full report available in the Analytics dashboard.",
+                "READ", "APPROVAL_PENDING", null, now.minusDays(14), now.minusDays(14), now.minusDays(13));
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // DELIVERY UPDATES
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Alice — PO #2 Stationery dispatched
+        notif(2L, "IN_APP", "Order Dispatched – PO #2 Stationery Supply",
+                "PO #2 (Annual Stationery Supply, OfficeEssentials Inc) has been dispatched. " +
+                "Tracking: OE-2025-0892. Expected delivery in 5 days.",
                 "READ", "DELIVERY_UPDATE", "2", now.minusDays(15), now.minusDays(15), now.minusDays(14));
 
-        createNotification(4L, "IN_APP", "Delivery Confirmed",
-                "PO #5 (Stationery Supply) has been delivered and closed successfully.",
-                "READ", "DELIVERY_UPDATE", "5", now.minusDays(30), now.minusDays(30), now.minusDays(29));
+        // Carol — PO #5 Stationery (old) delivered and closed
+        notif(4L, "IN_APP", "Delivery Confirmed – PO #5 Closed",
+                "PO #5 (Stationery Supply Q1 2025) has been delivered and closed after dispute resolution. " +
+                "810 reams received, revised invoice of $9,720 paid.",
+                "READ", "DELIVERY_UPDATE", "5", now.minusDays(20), now.minusDays(20), now.minusDays(19));
 
-        // ── Vendor alerts ─────────────────────────────────────────────────────
-        createNotification(1L, "IN_APP", "New Vendor Registration",
-                "ElectroWorld Co has registered and is pending compliance verification.",
-                "READ", "VENDOR_ALERT", "4", now.minusDays(45), now.minusDays(45), now.minusDays(44));
+        // Alice — PO #1 Server Room delivery confirmed (historical)
+        notif(2L, "IN_APP", "Delivery Confirmed – PO #1 Server Room Renovation",
+                "PO #1 (Server Room Renovation, BuildRight Ltd) has been delivered and signed off. " +
+                "Three-way match validated. Invoice #1 ($115,000) approved for payment.",
+                "READ", "DELIVERY_UPDATE", "1", now.minusDays(10), now.minusDays(10), now.minusDays(9));
 
-        createNotification(1L, "IN_APP", "Vendor Document Expiring Soon",
-                "TechSupply Corp's Tax Clearance Certificate expires in 30 days. Please follow up.",
-                "SENT", "VENDOR_ALERT", "1", now.minusDays(1), now.minusDays(1), null);
+        // BuildRight (vendor2) — their delivery was confirmed
+        notif(7L, "IN_APP", "Delivery Accepted – PO #1 Server Room Renovation",
+                "Your delivery for PO #1 (Server Room Renovation) has been accepted and signed off. " +
+                "Invoice #1 ($115,000) has been approved for payment. Payment expected within 30 days.",
+                "READ", "DELIVERY_UPDATE", "1", now.minusDays(10), now.minusDays(10), now.minusDays(9));
 
-        // ── Vendor-side notifications ─────────────────────────────────────────
-        createNotification(6L, "IN_APP", "New RFQ Available",
-                "A new RFQ 'Laptop Procurement Q3 2025' matching your category is open for bidding.",
-                "READ", "BID_DEADLINE", "1", now.minusDays(10), now.minusDays(10), now.minusDays(9));
+        // BuildRight — bid awarded notification
+        notif(7L, "IN_APP", "Bid Awarded – Server Room Renovation",
+                "Congratulations! Your bid of $115,000 for 'Server Room Renovation' (RFQ #4) " +
+                "has been awarded. PO #1 will be issued within 2 business days.",
+                "READ", "DELIVERY_UPDATE", "4", now.minusDays(55), now.minusDays(55), now.minusDays(54));
 
-        createNotification(7L, "IN_APP", "Bid Awarded",
-                "Congratulations! Your bid for 'Server Room Renovation' (RFQ #4) has been awarded.",
-                "READ", "DELIVERY_UPDATE", "4", now.minusDays(28), now.minusDays(28), now.minusDays(27));
-
-        createNotification(8L, "IN_APP", "Bid Accepted",
-                "Your bid for 'Annual Stationery Supply Contract' (RFQ #3) has been accepted.",
+        // OfficeEssentials — their bid was accepted (annual stationery)
+        notif(8L, "IN_APP", "Bid Accepted – Annual Stationery Supply Contract",
+                "Your bid of $11,200 for 'Annual Stationery Supply Contract' (RFQ #3) has been accepted. " +
+                "PO #2 will be issued. Please confirm delivery schedule.",
                 "READ", "BID_DEADLINE", "3", now.minusDays(18), now.minusDays(18), now.minusDays(17));
 
-        createNotification(9L, "IN_APP", "New RFQ Available",
-                "A new RFQ 'Network Equipment Upgrade' matching your category is open for bidding.",
-                "SENT", "BID_DEADLINE", "5", now.minusDays(2), now.minusDays(2), null);
+        // ═══════════════════════════════════════════════════════════════════════
+        // VENDOR ALERTS
+        // ═══════════════════════════════════════════════════════════════════════
 
-        // ── Dispute notifications ─────────────────────────────────────────────
-        createNotification(3L, "IN_APP", "Dispute Raised – PO #5",
-                "Quantity mismatch dispute raised on PO #5 (Stationery, OfficeEssentials). " +
+        // Admin — ElectroWorld new registration
+        notif(1L, "IN_APP", "New Vendor Registration – ElectroWorld Co",
+                "ElectroWorld Co has registered and submitted compliance documents. " +
+                "4 documents pending verification. Assigned to compliance team for review.",
+                "READ", "VENDOR_ALERT", "4", now.minusDays(45), now.minusDays(45), now.minusDays(44));
+
+        // Admin — BuildRight tax cert expiring soon (30 days)
+        notif(1L, "IN_APP", "Vendor Document Expiring – BuildRight Ltd",
+                "BuildRight Ltd's Tax Clearance Certificate expires in 30 days. " +
+                "Please request renewal. Certificate is required for active POs.",
+                "SENT", "VENDOR_ALERT", "2", now.minusDays(1), now.minusDays(1), null);
+
+        // Admin — OfficeEssentials expired tax cert (flagged)
+        notif(1L, "IN_APP", "Vendor Document Expired – OfficeEssentials Inc",
+                "OfficeEssentials Inc's Tax Clearance Certificate has expired. " +
+                "Vendor has uploaded a renewed certificate — pending admin verification.",
+                "SENT", "VENDOR_ALERT", "3", now.minusDays(5), now.minusDays(5), null);
+
+        // ElectroWorld — compliance verification pending
+        notif(9L, "IN_APP", "Compliance Verification In Progress",
+                "Your vendor registration is under review. 4 documents submitted are being verified " +
+                "by the procurement compliance team. You will be notified within 5 business days.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(44), now.minusDays(44), null);
+
+        // ElectroWorld — bid submitted confirmation for RFQ 5
+        notif(9L, "IN_APP", "Bid Submitted – Network Equipment Upgrade",
+                "Your bid of $33,000 for 'Network Equipment Upgrade' (RFQ #5) has been submitted. " +
+                "Bid deadline: 12 days remaining. You will be notified of the outcome.",
+                "READ", "VENDOR_ALERT", "5", now.minusDays(6), now.minusDays(6), now.minusDays(5));
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // DISPUTE NOTIFICATIONS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Bob — dispute raised (PO #5 short delivery)
+        notif(3L, "IN_APP", "Dispute Raised – PO #5 Quantity Mismatch",
+                "Dispute #1 raised on PO #5 (Stationery Supply, OfficeEssentials). " +
                 "810 of 900 reams delivered but full $10,800 invoiced. Awaiting manager review.",
                 "READ", "DELIVERY_UPDATE", "5", now.minusDays(27), now.minusDays(27), now.minusDays(26));
 
-        createNotification(4L, "IN_APP", "Dispute Resolved – PO #5",
-                "Dispute on PO #5 resolved. OfficeEssentials Inc issued revised invoice for $9,720 (810 reams). " +
-                "Original invoice voided.",
+        // Carol — dispute resolved
+        notif(4L, "IN_APP", "Dispute Resolved – PO #5",
+                "Dispute #1 on PO #5 resolved. OfficeEssentials Inc issued a revised invoice " +
+                "of $9,720 for the 810 reams actually delivered. Original invoice #4 voided.",
                 "READ", "DELIVERY_UPDATE", "5", now.minusDays(21), now.minusDays(21), now.minusDays(20));
 
-        createNotification(8L, "IN_APP", "Dispute Filed Against Your Invoice",
-                "A quantity mismatch dispute has been filed on your invoice for PO #5. " +
+        // OfficeEssentials (vendor) — dispute filed against them
+        notif(8L, "IN_APP", "Dispute Filed – Invoice Discrepancy on PO #5",
+                "A quantity mismatch dispute (Dispute #1) has been filed against your invoice on PO #5. " +
                 "810 reams delivered vs 900 ordered. Please issue a revised invoice for $9,720.",
                 "READ", "DELIVERY_UPDATE", "5", now.minusDays(27), now.minusDays(27), now.minusDays(25));
 
-        createNotification(3L, "IN_APP", "Price Dispute Opened – PO #2",
-                "Price mismatch dispute opened on PO #2 (Stationery, OfficeEssentials). " +
-                "Vendor added $300 freight surcharge not in original contract.",
-                "SENT", "DELIVERY_UPDATE", "2", now.minusDays(1), now.minusDays(1), null);
-
-        // ── Three-way match alerts ────────────────────────────────────────────
-        createNotification(2L, "IN_APP", "Three-Way Match Completed – PO #1",
-                "PO #1 (Server Room Renovation) three-way match validated. PO, delivery, and invoice all match. " +
-                "Invoice #1 ($115,000) approved for payment.",
-                "READ", "DELIVERY_UPDATE", "1", now.minusDays(5), now.minusDays(5), now.minusDays(4));
-
-        createNotification(4L, "IN_APP", "Three-Way Match Mismatch – PO #5",
-                "Three-way match for PO #5 shows quantity mismatch: 810 delivered vs 900 ordered. " +
-                "Invoice #4 flagged. Dispute #1 raised.",
-                "READ", "DELIVERY_UPDATE", "5", now.minusDays(26), now.minusDays(26), now.minusDays(25));
-
-        // ── Low inventory alerts ──────────────────────────────────────────────
-        createNotification(2L, "IN_APP", "Critical Stock Alert – Laptops",
-                "IT-001 (Laptop - Dell XPS 15) is critically low: 2 units remaining (min: 10). " +
-                "PR-2025-001 raised, approved, and converted to PO #4 (Approved, delivery in 14 days).",
-                "READ", "VENDOR_ALERT", null, now.minusDays(40), now.minusDays(40), now.minusDays(39));
-
-        createNotification(2L, "IN_APP", "Critical Stock Alert – Standing Desks",
-                "FN-002 (Standing Desk) is out of stock. PR-2025-002 raised for 30 units. " +
-                "PO #3 pending manager approval.",
-                "SENT", "VENDOR_ALERT", null, now.minusDays(3), now.minusDays(3), null);
-
-        // ── Auditor notifications ─────────────────────────────────────────────
-        createNotification(11L, "IN_APP", "Monthly Compliance Report Ready",
-                "The vendor compliance report for April 2025 is ready for review.",
-                "SENT", "VENDOR_ALERT", null, now.minusDays(10), now.minusDays(10), null);
-
-        createNotification(11L, "IN_APP", "Dispute Activity Summary",
-                "4 disputes recorded this period: 2 resolved/closed, 1 open, 1 under review. " +
-                "Total disputed value: $11,380. Review audit trail for details.",
-                "SENT", "VENDOR_ALERT", null, now.minusDays(5), now.minusDays(5), null);
-
-        // ── Email notifications ────────────────────────────────────────────────
-        createNotification(2L, "EMAIL", "RFQ Closed – Action Required",
-                "RFQ 'Annual Stationery Supply Contract' has closed. Please evaluate bids and select a winner.",
-                "SENT", "BID_DEADLINE", "3", now.minusDays(5), now.minusDays(5), null);
-
-        createNotification(4L, "EMAIL", "High-Value PO Approved – PO #1",
-                "Purchase Order #1 for Server Room Renovation (BuildRight Ltd, $115,000) has been approved. " +
-                "Vendor has been notified to proceed.",
-                "READ", "APPROVAL_PENDING", "1", now.minusDays(54), now.minusDays(54), now.minusDays(53));
-
-        createNotification(4L, "EMAIL", "PO #3 Awaiting Your Approval – Urgent",
-                "PO #3 for Office Furniture (FurniturePlus LLC, $42,000) is pending your approval. " +
-                "Standing desks are out of stock.",
-                "SENT", "APPROVAL_PENDING", "3", now.minusDays(3), now.minusDays(3), null);
-
-        createNotification(4L, "EMAIL", "PO #4 Approved – Laptops",
-                "Purchase Order #4 for Laptop Procurement (TechSupply Corp, $72,000) has been approved. " +
-                "Expected delivery in 14 days.",
-                "READ", "APPROVAL_PENDING", "4", now.minusDays(4), now.minusDays(4), now.minusDays(3));
-
-        createNotification(8L, "EMAIL", "Revised Invoice Required – PO #5",
+        // OfficeEssentials — revised invoice request email
+        notif(8L, "EMAIL", "Action Required – Revised Invoice for PO #5",
                 "Please issue a revised invoice for PO #5 reflecting 810 reams at $12/ream = $9,720. " +
-                "Original invoice has been disputed and voided.",
+                "The original invoice #4 ($10,800) has been disputed and voided. " +
+                "Revised invoice required within 3 business days.",
                 "READ", "DELIVERY_UPDATE", "5", now.minusDays(24), now.minusDays(24), now.minusDays(22));
 
-        log.info("Notifications initialized");
+        // Bob — new price dispute on PO #2 (freight surcharge)
+        notif(3L, "IN_APP", "Price Dispute Opened – PO #2",
+                "Dispute #3 raised on PO #2 (Annual Stationery, OfficeEssentials). " +
+                "Vendor added $300 freight surcharge not included in original contract. Awaiting resolution.",
+                "SENT", "DELIVERY_UPDATE", "2", now.minusDays(1), now.minusDays(1), null);
+
+        // Director — awareness of active disputes
+        notif(12L, "IN_APP", "Dispute Activity Summary",
+                "4 disputes recorded this period: Dispute #1 & #2 resolved/closed, " +
+                "Dispute #3 open (price mismatch PO #2), Dispute #4 under review (delayed delivery PO #5). " +
+                "Total disputed value: $11,380.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(5), now.minusDays(5), null);
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // THREE-WAY MATCH ALERTS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Alice — PO #1 three-way match passed
+        notif(2L, "IN_APP", "Three-Way Match Validated – PO #1",
+                "PO #1 (Server Room Renovation) three-way match completed: PO, delivery, and invoice " +
+                "all confirmed. Invoice #1 ($115,000) approved for payment processing.",
+                "READ", "DELIVERY_UPDATE", "1", now.minusDays(5), now.minusDays(5), now.minusDays(4));
+
+        // Carol — PO #5 three-way match mismatch
+        notif(4L, "IN_APP", "Three-Way Match Mismatch – PO #5",
+                "Three-way match for PO #5: quantity mismatch detected. 810 reams delivered vs 900 ordered. " +
+                "Invoice #4 flagged. Dispute #1 raised and resolved — revised invoice #5 ($9,720) paid.",
+                "READ", "DELIVERY_UPDATE", "5", now.minusDays(26), now.minusDays(26), now.minusDays(25));
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // LOW INVENTORY ALERTS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Alice — critical laptop stock (triggered PR-2025-001)
+        notif(2L, "IN_APP", "Critical Stock Alert – Laptops (IT-001)",
+                "IT-001 (Laptop - Dell XPS 15) is critically low: 2 units remaining (min: 10). " +
+                "PR-2025-001 raised and approved. PO #4 (TechSupply, $72,000) approved. " +
+                "Delivery expected in 14 days.",
+                "READ", "VENDOR_ALERT", null, now.minusDays(40), now.minusDays(40), now.minusDays(39));
+
+        // Alice — standing desks out of stock (triggered PR-2025-002)
+        notif(2L, "IN_APP", "Critical Stock Alert – Standing Desks (FN-002)",
+                "FN-002 (Standing Desk) is out of stock. PR-2025-002 raised for 30 units. " +
+                "PO #3 (FurniturePlus LLC, $42,000) pending manager approval.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(3), now.minusDays(3), null);
+
+        // Alice — network equipment low (triggered PR-2025-003)
+        notif(2L, "IN_APP", "Low Stock Alert – Network Equipment",
+                "EL-001 (Network Switch 24-Port): 1 unit remaining. " +
+                "EL-003 (Router - Enterprise): 0 units remaining. " +
+                "PR-2025-003 (Network Equipment, $35,000) pending manager approval.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(5), now.minusDays(5), null);
+
+        // Admin — sticky notes out of stock (systemic gap)
+        notif(1L, "IN_APP", "Stock-Out Alert – Sticky Notes (OS-004)",
+                "OS-004 (Sticky Notes Pack) is completely out of stock (0 packs). " +
+                "Replenishment included in PO #2 (Stationery Supply, OfficeEssentials) — in transit.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(2), now.minusDays(2), null);
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // AUDITOR NOTIFICATIONS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Eve (auditor) — monthly compliance report
+        notif(11L, "IN_APP", "Monthly Compliance Report Ready – April 2025",
+                "Vendor compliance report for April 2025 is ready for review. " +
+                "5 vendors: 4 Verified, 1 Pending. 2 document expirations flagged. " +
+                "Full report in the Compliance dashboard.",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(10), now.minusDays(10), null);
+
+        // Eve (auditor) — dispute activity summary
+        notif(11L, "IN_APP", "Dispute Activity Summary – Q2 2025",
+                "4 disputes recorded this quarter: 2 resolved/closed, 1 open, 1 under review. " +
+                "Total disputed value: $11,380. Vendor at most risk: OfficeEssentials Inc (2 disputes).",
+                "SENT", "VENDOR_ALERT", null, now.minusDays(5), now.minusDays(5), null);
+
+        // Eve (auditor) — PO spend audit alert
+        notif(11L, "EMAIL", "Audit Alert – High-Value PO Approved",
+                "PO #1 (Server Room Renovation, BuildRight Ltd, $115,000) was approved and completed. " +
+                "Three-way match validated. Invoice paid. No compliance issues identified.",
+                "READ", "APPROVAL_PENDING", "1", now.minusDays(52), now.minusDays(52), now.minusDays(51));
+
+        // Eve — ElectroWorld pending verification notice
+        notif(11L, "IN_APP", "New Vendor Pending Verification – ElectroWorld Co",
+                "ElectroWorld Co has submitted 4 compliance documents for verification. " +
+                "Please complete the compliance review within 5 business days.",
+                "SENT", "VENDOR_ALERT", "4", now.minusDays(43), now.minusDays(43), null);
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // DIRECTOR NOTIFICATIONS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Frank (director) — quarterly spend summary
+        notif(12L, "EMAIL", "Quarterly Procurement Report – Q1 2025",
+                "Q1 2025 procurement spend: $128,000. POs closed: 2. Active POs: 3. " +
+                "Top vendor by spend: BuildRight Ltd ($115,000). Savings vs budget: 8%. " +
+                "Full analytics available in the dashboard.",
+                "READ", "APPROVAL_PENDING", null, now.minusDays(45), now.minusDays(45), now.minusDays(44));
+
+        // Frank (director) — vendor risk alert
+        notif(12L, "IN_APP", "Vendor Risk Alert – OfficeEssentials Inc",
+                "OfficeEssentials Inc risk level: MEDIUM. 2 disputes raised this quarter, " +
+                "tax certificate recently expired (now renewed). " +
+                "Consider dual-sourcing stationery supply to reduce dependency.",
+                "SENT", "VENDOR_ALERT", "3", now.minusDays(3), now.minusDays(3), null);
+
+        log.info("Notifications initialized: 42 records");
     }
 
-    private void createNotification(Long userId, String type, String title, String message,
-                                     String status, String category, String relatedEntityId,
-                                     LocalDateTime createdAt, LocalDateTime sentAt, LocalDateTime readAt) {
+    private void notif(Long userId, String type, String title, String message,
+                        String status, String category, String relatedEntityId,
+                        LocalDateTime createdAt, LocalDateTime sentAt, LocalDateTime readAt) {
         Notification n = new Notification();
         n.setUserId(userId);
         n.setType(type);

@@ -53,6 +53,7 @@ public class PurchaseOrderService {
             po.setStatus("Approved");
             po.setApprovedBy(userId);
             po.setApprovalDate(LocalDate.now());
+            log.info("PO auto-approved (below manager threshold of {}): amount={}", managerThreshold, request.getTotalAmount());
         } else {
             po.setStatus("Pending Approval");
         }
@@ -101,18 +102,22 @@ public class PurchaseOrderService {
         }
         
         boolean canApprove = false;
-        
-        if (po.getTotalAmount().compareTo(managerThreshold) >= 0 && 
-            po.getTotalAmount().compareTo(directorThreshold) < 0 && 
-            "MANAGER".equals(approverRole)) {
+
+        if ("ADMIN".equals(approverRole)) {
+            // ADMIN can approve any PO regardless of amount
             canApprove = true;
-        } else if (po.getTotalAmount().compareTo(directorThreshold) >= 0 && 
-                   "ADMIN".equals(approverRole)) {
+        } else if (po.getTotalAmount().compareTo(managerThreshold) >= 0 &&
+            po.getTotalAmount().compareTo(directorThreshold) < 0 &&
+            ("MANAGER".equals(approverRole))) {
+            canApprove = true;
+        } else if (po.getTotalAmount().compareTo(directorThreshold) >= 0 &&
+                   ("ADMIN".equals(approverRole) || "DIRECTOR".equals(approverRole))) {
             canApprove = true;
         }
-        
+
         if (!canApprove) {
-            throw new RuntimeException("Approver does not have sufficient privileges");
+            throw new RuntimeException("Approver role '" + approverRole +
+                "' does not have sufficient privileges to approve a PO of $" + po.getTotalAmount());
         }
         
         po.setStatus("Approved");
@@ -128,14 +133,15 @@ public class PurchaseOrderService {
     }
     
     @Transactional
-    public PurchaseOrderResponse rejectPurchaseOrder(Long poId) {
+    public PurchaseOrderResponse rejectPurchaseOrder(Long poId, Long rejectorId) {
         PurchaseOrder po = poRepository.findById(poId)
             .orElseThrow(() -> new RuntimeException("Purchase Order not found"));
-        
+
         po.setStatus("Rejected");
+        po.setApprovedBy(rejectorId); // reuse field to record who rejected
         PurchaseOrder rejectedPO = poRepository.save(po);
-        log.info("Purchase Order rejected: {}", poId);
-        
+        log.info("Purchase Order rejected: {} by user: {}", poId, rejectorId);
+
         return mapToResponse(rejectedPO);
     }
     

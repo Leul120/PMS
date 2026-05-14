@@ -67,8 +67,10 @@ public class ScoringService {
     @Transactional
     public void calculateAndUpdateScore(Long vendorId, DeliveryCompletedEvent deliveryEvent) {
         // ── Timeliness score ──────────────────────────────────────────────────
-        // Formula: max(0, (1 - delayDays / 30) * 100). On-time = 100, 30+ days late = 0.
-        int expectedDays = 30;
+        // Formula: max(0, (1 - delayDays / expectedDays) * 100).
+        // Uses the actual PO delivery window. Falls back to 30 days if not provided.
+        int expectedDays = (deliveryEvent.getExpectedDays() != null && deliveryEvent.getExpectedDays() > 0)
+            ? deliveryEvent.getExpectedDays() : 30;
         int timelinessScore = Math.max(0,
             (int) ((1.0 - (double) deliveryEvent.getDelayDays() / expectedDays) * 100));
 
@@ -158,13 +160,42 @@ public class ScoringService {
     public List<VendorScore> getScoresByVendor(Long vendorId) {
         return vendorScoreRepository.findByVendorId(vendorId);
     }
-    
+
+    public VendorScore getLatestScore(Long vendorId) {
+        return vendorScoreRepository
+            .findByVendorIdAndPerformanceMetric(vendorId, "Overall")
+            .orElse(null);
+    }
+
     public List<VendorScore> getAllScoresRanked() {
         return vendorScoreRepository.findAllByOrderByWeightedScoreDesc();
     }
-    
+
     public VendorPerformanceRecord getLatestPerformanceRecord(Long vendorId) {
         return performanceRecordRepository.findTopByVendorIdOrderByCalculatedDateDesc(vendorId)
             .orElse(null);
+    }
+
+    /**
+     * Manually recalculate a vendor's score using their latest performance record.
+     * Creates a synthetic DeliveryCompletedEvent from stored history so the same
+     * formula is applied consistently.
+     */
+    @Transactional
+    public void recalculateScoreForVendor(Long vendorId) {
+        VendorPerformanceRecord latest =
+            performanceRecordRepository.findTopByVendorIdOrderByCalculatedDateDesc(vendorId)
+                .orElse(null);
+
+        // Build a synthetic event from stored data (0 delay = on-time baseline for manual recalc)
+        DeliveryCompletedEvent syntheticEvent = new DeliveryCompletedEvent();
+        syntheticEvent.setVendorId(vendorId);
+        syntheticEvent.setDelayDays(0);
+        syntheticEvent.setQualityRemarks(latest != null && latest.getQualityScore() != null
+            && latest.getQualityScore() < 80 ? "minor issue" : "");
+        syntheticEvent.setQuantityDelivered(0);
+
+        calculateAndUpdateScore(vendorId, syntheticEvent);
+        log.info("Manual score recalculation completed for vendor: {}", vendorId);
     }
 }

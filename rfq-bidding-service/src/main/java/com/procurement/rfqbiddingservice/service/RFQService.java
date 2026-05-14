@@ -188,6 +188,12 @@ public class RFQService {
             .map(this::mapToBidResponse)
             .collect(Collectors.toList());
     }
+
+    public BidResponse getBidById(Long bidId) {
+        Bid bid = bidRepository.findById(bidId)
+            .orElseThrow(() -> new RuntimeException("Bid not found: " + bidId));
+        return mapToBidResponse(bid);
+    }
     
     public List<BidResponse> getBidsByVendor(Long vendorId) {
         return bidRepository.findByVendorId(vendorId).stream()

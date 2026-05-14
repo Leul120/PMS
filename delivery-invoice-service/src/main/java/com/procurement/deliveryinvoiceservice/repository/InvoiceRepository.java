@@ -9,5 +9,6 @@ import java.util.List;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Invoice> findByPoId(Long poId);
+    List<Invoice> findByVendorId(Long vendorId);
     Page<Invoice> findAll(Pageable pageable);
 }

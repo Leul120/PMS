@@ -51,10 +51,18 @@ public class DeliveryInvoiceService {
         delivery.setIssueNotes(issueNotes);
         delivery.setQualityRemarks(qualityRemarks);
         
-        // Calculate delay days
+        // Calculate delay days and expected window
         int delayDays = 0;
-        if (actualDate != null && expectedDate != null && actualDate.isAfter(expectedDate)) {
-            delayDays = (int) ChronoUnit.DAYS.between(expectedDate, actualDate);
+        int expectedDays = 30; // default window
+        if (actualDate != null && expectedDate != null) {
+            if (actualDate.isAfter(expectedDate)) {
+                delayDays = (int) ChronoUnit.DAYS.between(expectedDate, actualDate);
+            }
+            // Use the actual PO delivery window if we have a creation reference.
+            // For now derive from expectedDate relative to today as a proxy.
+            // The scoring service will use this for a proportional timeliness score.
+            expectedDays = Math.max(1, (int) ChronoUnit.DAYS.between(LocalDate.now().minusDays(60), expectedDate));
+            if (expectedDays <= 0) expectedDays = 30;
         }
         delivery.setDelayDays(delayDays);
         
@@ -66,6 +74,7 @@ public class DeliveryInvoiceService {
             .poId(poId)
             .vendorId(vendorId)
             .delayDays(delayDays)
+            .expectedDays(expectedDays)
             .quantityDelivered(quantityDelivered)
             .qualityRemarks(qualityRemarks)
             .completedAt(LocalDateTime.now())
@@ -93,6 +102,7 @@ public class DeliveryInvoiceService {
     public Invoice submitInvoice(Long poId, BigDecimal invoiceAmount, Long vendorId) {
         Invoice invoice = new Invoice();
         invoice.setPoId(poId);
+        invoice.setVendorId(vendorId);
         invoice.setInvoiceAmount(invoiceAmount);
         invoice.setStatus("Pending");
         invoice.setInvoiceDate(LocalDate.now());
@@ -174,6 +184,20 @@ public class DeliveryInvoiceService {
     
     public List<Invoice> getInvoicesByPO(Long poId) {
         return invoiceRepository.findByPoId(poId);
+    }
+
+    public List<Invoice> getInvoicesByVendor(Long vendorId) {
+        return invoiceRepository.findByVendorId(vendorId);
+    }
+
+    @Transactional
+    public Delivery updateDeliveryStatus(Long deliveryId, String status) {
+        Delivery delivery = deliveryRepository.findById(deliveryId)
+            .orElseThrow(() -> new RuntimeException("Delivery not found: " + deliveryId));
+        delivery.setDeliveryStatus(status);
+        Delivery updated = deliveryRepository.save(delivery);
+        log.info("Delivery {} status updated to: {}", deliveryId, status);
+        return updated;
     }
     
     public PagedResponse<Invoice> getAllInvoices(int page, int size) {

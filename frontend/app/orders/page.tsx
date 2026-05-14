@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -37,17 +35,26 @@ import {
 } from "@/components/ui/dialog";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
+import {
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
   Package,
   Truck,
-  CheckCircle,
+  CheckCircle2,
   Clock,
-  Loader2
+  Loader2,
+  ShoppingCart,
 } from "lucide-react";
+
+function daysAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return `${days}d ago`;
+}
 
 interface Order {
   id: string;
@@ -181,34 +188,32 @@ export default function OrdersPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-3">
-          <Card className="border-0 shadow-sm bg-gray-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-gray-500">Total Orders</p>
-              <p className="text-xl font-semibold text-gray-700 mt-1">{loading ? "-" : orders.length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-amber-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-amber-600">Pending</p>
-              <p className="text-xl font-semibold text-amber-700 mt-1">{loading ? "-" : orders.filter(o => isPending(o.status)).length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-blue-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-blue-600">Approved</p>
-              <p className="text-xl font-semibold text-blue-700 mt-1">{loading ? "-" : orders.filter(o => o.status?.toLowerCase().includes("approved") && !o.status?.toLowerCase().includes("pending")).length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-emerald-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-emerald-600">Delivered</p>
-              <p className="text-xl font-semibold text-emerald-700 mt-1">{loading ? "-" : orders.filter(o => o.status?.toLowerCase() === 'delivered').length}</p>
-            </CardContent>
-          </Card>
-        </div>
+        {(() => {
+          const pendingCount = orders.filter(o => isPending(o.status)).length;
+          const approvedCount = orders.filter(o => o.status?.toLowerCase().includes("approved") && !o.status?.toLowerCase().includes("pending")).length;
+          const deliveredCount = orders.filter(o => o.status?.toLowerCase() === "delivered").length;
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+              {[
+                { label: "Total Orders", value: orders.length, sub: "All purchase orders", icon: ShoppingCart },
+                { label: "Awaiting Approval", value: pendingCount, sub: pendingCount > 0 ? "Needs manager review" : "All reviewed", icon: Clock },
+                { label: "Approved", value: approvedCount, sub: "Ready to fulfill", icon: Package },
+                { label: "Delivered", value: deliveredCount, sub: "Completed orders", icon: CheckCircle2 },
+              ].map(({ label, value, sub, icon: Icon }) => (
+                <div key={label} className="px-4 py-3 flex items-center gap-3">
+                  <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                    {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                    {!loading && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
-        <Tabs defaultValue="all" className="space-y-4">
+        <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">All Orders</TabsTrigger>
             <TabsTrigger value="processing">Processing</TabsTrigger>
@@ -217,26 +222,22 @@ export default function OrdersPage() {
           </TabsList>
 
           <TabsContent value="all">
-            <Card>
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>Order List</CardTitle>
-                  <CardDescription>View and manage all purchase orders</CardDescription>
-                </div>
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">All Orders</p>
                 <div className="flex gap-2">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <Input
                       type="search"
                       placeholder="Search orders..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8 w-full sm:w-[300px]"
+                      className="pl-8 w-[200px] h-8 text-xs border-gray-200"
                     />
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[140px] h-9">
-                      <Filter className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectTrigger className="h-8 text-xs w-[130px]">
                       <SelectValue placeholder="Filter" />
                     </SelectTrigger>
                     <SelectContent>
@@ -247,84 +248,88 @@ export default function OrdersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Order ID</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Vendor</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Order Date</TableHead>
-                        <TableHead>Expected Delivery</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+              </div>
+              <div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Order</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Date</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Delivery</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-12">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-gray-400" />
+                      </TableCell></TableRow>
+                    ) : filteredOrders.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-12">
+                        <Package className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs font-medium text-gray-500">No orders found.</p>
+                        {canCreatePO && <p className="text-[10px] text-gray-400 mt-0.5">Click "New Order" to create a purchase order.</p>}
+                      </TableCell></TableRow>
+                    ) : filteredOrders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="py-2.5">
+                          <p className="text-xs font-medium font-mono">{order.poNumber}</p>
+                          {order.description && <p className="text-[10px] text-gray-400 truncate max-w-[140px]">{order.description}</p>}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
+                        <TableCell className="py-2.5">
+                          {(() => {
+                            const s = order.status?.toLowerCase() || "";
+                            const cls = s === "delivered" ? "bg-emerald-100 text-emerald-700"
+                              : (s.includes("approved") && !s.includes("pending")) ? "bg-emerald-100 text-emerald-700"
+                              : (s.includes("pending") || s === "draft") ? "bg-amber-100 text-amber-700"
+                              : s.includes("rejected") ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-600";
+                            return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{order.status}</span>;
+                          })()}
+                        </TableCell>
+                        <TableCell className="text-[10px] text-gray-500 py-2.5">
+                          {order.createdAt ? daysAgo(order.createdAt) : "—"}
+                        </TableCell>
+                        <TableCell className="text-[10px] text-gray-500 py-2.5">
+                          {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "—"}
+                        </TableCell>
+                        <TableCell className="py-2.5 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="text-xs">
+                              <DropdownMenuLabel className="text-xs">Actions</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-xs" onClick={() => setDetailOrder(order)}>View Details</DropdownMenuItem>
+                              {canLogDelivery && (order.status?.toLowerCase().includes("approved") || order.status?.toLowerCase() === "delivered") && (
+                                <DropdownMenuItem className="text-xs" onClick={() => { setDeliveryPOId(order.id); setDeliveryDialogOpen(true); }}>
+                                  Log Delivery Receipt
+                                </DropdownMenuItem>
+                              )}
+                              {order.trackingNumber && (
+                                <DropdownMenuItem className="text-xs" onClick={() => {
+                                  navigator.clipboard.writeText(order.trackingNumber!).catch(() => {});
+                                  toast({ title: "Tracking Number Copied", description: order.trackingNumber });
+                                }}>
+                                  Copy Tracking
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOrders.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                            No orders found. Create your first order to get started.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredOrders.map((order) => (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-medium">{order.poNumber}</TableCell>
-                            <TableCell>{order.description || order.title || "N/A"}</TableCell>
-                            <TableCell>{order.vendorName || "N/A"}</TableCell>
-                            <TableCell className="font-medium">${order.totalAmount?.toLocaleString() || 0}</TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusVariant(order.status)}>
-                                {order.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
-                            <TableCell>{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "N/A"}</TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => setDetailOrder(order)}>View Details</DropdownMenuItem>
-                                  {canLogDelivery && (order.status?.toLowerCase().includes("approved") || order.status?.toLowerCase() === "delivered") && (
-                                    <DropdownMenuItem onClick={() => {
-                                      setDeliveryPOId(order.id);
-                                      setDeliveryDialogOpen(true);
-                                    }}>
-                                      Log Delivery Receipt
-                                    </DropdownMenuItem>
-                                  )}
-                                  {order.trackingNumber && (
-                                    <DropdownMenuItem onClick={() => {
-                                      navigator.clipboard.writeText(order.trackingNumber!).catch(() => {});
-                                      toast({ title: "Tracking Number Copied", description: order.trackingNumber });
-                                    }}>
-                                      Copy Tracking: {order.trackingNumber}
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               <PaginationControls
                 page={currentPage}
                 totalPages={totalPages}
@@ -333,140 +338,142 @@ export default function OrdersPage() {
                 onPageChange={(p) => setCurrentPage(p)}
                 loading={loading}
               />
-            </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="processing">
-            <Card>
-              <CardHeader>
-                <CardTitle>Processing Orders</CardTitle>
-                <CardDescription>Orders being prepared for shipment</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">Processing Orders</p>
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Order ID</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Order</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.filter(o => isPending(o.status) || o.status?.toLowerCase() === 'processing').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No processing orders found.
+                    {orders.filter(o => isPending(o.status) || o.status?.toLowerCase() === "processing").length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-10">
+                        <Clock className="h-5 w-5 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs text-gray-500">No orders currently processing.</p>
+                      </TableCell></TableRow>
+                    ) : orders.filter(o => isPending(o.status) || o.status?.toLowerCase() === "processing").map((order) => (
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="py-2.5">
+                          <p className="text-xs font-medium font-mono">{order.poNumber}</p>
+                          {order.createdAt && <p className="text-[10px] text-gray-400">{daysAgo(order.createdAt)}</p>}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
+                        <TableCell className="py-2.5">
+                          {(() => {
+                            const s = order.status?.toLowerCase() || "";
+                            const cls = s === "delivered" ? "bg-emerald-100 text-emerald-700"
+                              : (s.includes("approved") && !s.includes("pending")) ? "bg-emerald-100 text-emerald-700"
+                              : (s.includes("pending") || s === "draft") ? "bg-amber-100 text-amber-700"
+                              : s.includes("rejected") ? "bg-red-100 text-red-700"
+                              : "bg-gray-100 text-gray-600";
+                            return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{order.status}</span>;
+                          })()}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      orders.filter(o => isPending(o.status) || o.status?.toLowerCase() === 'processing').map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.poNumber}</TableCell>
-                          <TableCell>{order.description || order.title || "N/A"}</TableCell>
-                          <TableCell>{order.vendorName || "N/A"}</TableCell>
-                          <TableCell className="font-medium">${order.totalAmount?.toLocaleString() || 0}</TableCell>
-                          <TableCell>
-                            <Badge variant={getStatusVariant(order.status)}>{order.status}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="shipped">
-            <Card>
-              <CardHeader>
-                <CardTitle>Shipped Orders</CardTitle>
-                <CardDescription>Orders in transit</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">Shipped Orders</p>
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Order ID</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Tracking</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Order</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Tracking</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.filter(o => o.status?.toLowerCase() === 'shipped' || o.status?.toLowerCase() === 'in_transit' || o.deliveryStatus?.toLowerCase() === 'shipped').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No shipped orders found.
+                    {orders.filter(o => o.status?.toLowerCase() === "shipped" || o.status?.toLowerCase() === "in_transit" || o.deliveryStatus?.toLowerCase() === "shipped").length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-10">
+                        <Truck className="h-5 w-5 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs text-gray-500">No orders currently in transit.</p>
+                      </TableCell></TableRow>
+                    ) : orders.filter(o => o.status?.toLowerCase() === "shipped" || o.status?.toLowerCase() === "in_transit" || o.deliveryStatus?.toLowerCase() === "shipped").map((order) => (
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="py-2.5">
+                          <p className="text-xs font-medium font-mono">{order.poNumber}</p>
+                          {order.createdAt && <p className="text-[10px] text-gray-400">{daysAgo(order.createdAt)}</p>}
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
+                        <TableCell className="text-xs text-gray-500 py-2.5 font-mono">
+                          {order.trackingNumber || <span className="text-gray-400">No tracking</span>}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      orders.filter(o => o.status?.toLowerCase() === 'shipped' || o.status?.toLowerCase() === 'in_transit' || o.deliveryStatus?.toLowerCase() === 'shipped').map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.poNumber}</TableCell>
-                          <TableCell>{order.description || order.title || "N/A"}</TableCell>
-                          <TableCell>{order.vendorName || "N/A"}</TableCell>
-                          <TableCell className="font-medium">${order.totalAmount?.toLocaleString() || 0}</TableCell>
-                          <TableCell>{order.trackingNumber || "N/A"}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="delivered">
-            <Card>
-              <CardHeader>
-                <CardTitle>Delivered Orders</CardTitle>
-                <CardDescription>Completed deliveries</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">Delivered Orders</p>
+              </div>
+              <div>
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Order ID</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Delivery Date</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Order</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Amount</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Delivered</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.filter(o => o.status?.toLowerCase() === 'delivered' || o.deliveryStatus?.toLowerCase() === 'delivered').length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No delivered orders found.
+                    {orders.filter(o => o.status?.toLowerCase() === "delivered" || o.deliveryStatus?.toLowerCase() === "delivered").length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-10">
+                        <CheckCircle2 className="h-5 w-5 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs text-gray-500">No deliveries completed yet.</p>
+                      </TableCell></TableRow>
+                    ) : orders.filter(o => o.status?.toLowerCase() === "delivered" || o.deliveryStatus?.toLowerCase() === "delivered").map((order) => (
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                        <TableCell className="py-2.5">
+                          <p className="text-xs font-medium font-mono">{order.poNumber}</p>
+                        </TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
+                        <TableCell className="text-[10px] text-gray-500 py-2.5">
+                          {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "—"}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      orders.filter(o => o.status?.toLowerCase() === 'delivered' || o.deliveryStatus?.toLowerCase() === 'delivered').map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.poNumber}</TableCell>
-                          <TableCell>{order.description || order.title || "N/A"}</TableCell>
-                          <TableCell>{order.vendorName || "N/A"}</TableCell>
-                          <TableCell className="font-medium">${order.totalAmount?.toLocaleString() || 0}</TableCell>
-                          <TableCell>{order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "N/A"}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
+                    ))}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
-      
-      <PODialog 
-        open={dialogOpen} 
-        onOpenChange={setDialogOpen} 
-        onSuccess={loadOrders} 
+
+      <PODialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={loadOrders}
       />
 
       <DeliveryDialog
@@ -478,7 +485,7 @@ export default function OrdersPage() {
 
       {/* Order Detail Dialog */}
       <Dialog open={!!detailOrder} onOpenChange={(o) => !o && setDetailOrder(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] rounded">
           <DialogHeader>
             <DialogTitle>{detailOrder?.poNumber}</DialogTitle>
             <DialogDescription>Purchase Order Details</DialogDescription>
@@ -487,15 +494,24 @@ export default function OrdersPage() {
             <div className="space-y-3 py-2 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-xs text-gray-500">Status</p>
-                  <Badge variant={getStatusVariant(detailOrder.status)} className="mt-0.5">{detailOrder.status}</Badge></div>
+                  {(() => {
+                    const s = detailOrder.status?.toLowerCase() || "";
+                    const cls = s === "delivered" ? "bg-emerald-100 text-emerald-700"
+                      : (s.includes("approved") && !s.includes("pending")) ? "bg-emerald-100 text-emerald-700"
+                      : (s.includes("pending") || s === "draft") ? "bg-amber-100 text-amber-700"
+                      : s.includes("rejected") ? "bg-red-100 text-red-700"
+                      : "bg-gray-100 text-gray-600";
+                    return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${cls}`}>{detailOrder.status}</span>;
+                  })()}
+                </div>
                 <div><p className="text-xs text-gray-500">Vendor</p>
                   <p className="font-medium">{detailOrder.vendorName || "N/A"}</p></div>
                 <div><p className="text-xs text-gray-500">Total Amount</p>
                   <p className="font-medium text-lg">${detailOrder.totalAmount?.toLocaleString()}</p></div>
                 <div><p className="text-xs text-gray-500">Order Date</p>
-                  <p className="font-medium">{detailOrder.createdAt ? new Date(detailOrder.createdAt).toLocaleDateString() : "â€â€"}</p></div>
+                  <p className="font-medium">{detailOrder.createdAt ? new Date(detailOrder.createdAt).toLocaleDateString() : "—"}</p></div>
                 <div><p className="text-xs text-gray-500">Expected Delivery</p>
-                  <p className="font-medium">{detailOrder.deliveryDate ? new Date(detailOrder.deliveryDate).toLocaleDateString() : "â€â€"}</p></div>
+                  <p className="font-medium">{detailOrder.deliveryDate ? new Date(detailOrder.deliveryDate).toLocaleDateString() : "—"}</p></div>
                 {detailOrder.trackingNumber && (
                   <div><p className="text-xs text-gray-500">Tracking</p>
                     <p className="font-medium font-mono text-xs">{detailOrder.trackingNumber}</p></div>
@@ -516,4 +532,3 @@ export default function OrdersPage() {
     </RequireRole>
   );
 }
-

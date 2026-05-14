@@ -2,20 +2,31 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { notificationApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
 import { RequireRole } from "@/components/require-role";
-import { 
-  Bell, 
-  CheckCircle, 
+import {
+  Bell,
+  CheckCircle2,
   AlertTriangle,
   Info,
-  Clock
+  Clock,
+  Loader2,
 } from "lucide-react";
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "Yesterday";
+  return `${days}d ago`;
+}
 
 interface Notification {
   notificationId: string;
@@ -41,7 +52,7 @@ export default function NotificationsPage() {
         setNotifications(data || []);
       }
     } catch {
-      // silently ignore â€â€ show empty state
+      // silently ignore — show empty state
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -69,9 +80,9 @@ export default function NotificationsPage() {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'BID_DEADLINE': return <Clock className="h-4 w-4 text-amber-500" />;
-      case 'APPROVAL_PENDING': return <AlertTriangle className="h-4 w-4 text-rose-500" />;
-      case 'DELIVERY_UPDATE': return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+      case "BID_DEADLINE": return <Clock className="h-4 w-4 text-amber-500" />;
+      case "APPROVAL_PENDING": return <AlertTriangle className="h-4 w-4 text-rose-500" />;
+      case "DELIVERY_UPDATE": return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
       default: return <Info className="h-4 w-4 text-blue-500" />;
     }
   };
@@ -97,7 +108,7 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Notifications</h1>
-            <p className="text-xs text-gray-500 mt-0.5">View and manage notifications</p>
+            <p className="text-xs text-gray-500 mt-0.5">Stay up to date on approvals, deliveries, and deadlines</p>
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
@@ -113,53 +124,63 @@ export default function NotificationsPage() {
         </div>
 
         <div className="space-y-2">
-          {notifications.length === 0 && !loading && (
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-8 text-center">
-                <Bell className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500 text-xs">No notifications yet</p>
-              </CardContent>
-            </Card>
-          )}
-          
-          {notifications.map((notification) => (
-            <Card key={notification.notificationId} className={`border-0 shadow-sm ${notification.status === 'PENDING' ? 'border-l-2 border-l-primary' : ''}`}>
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5">
-                    {getCategoryIcon(notification.category)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="text-xs font-medium text-gray-900">{notification.title}</h3>
-                        <p className="text-[11px] text-gray-500 mt-0.5">{notification.message}</p>
-                        <p className="text-[10px] text-gray-400 mt-1">
-                          {new Date(notification.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {notification.status === 'PENDING' && (
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            className="h-6 text-[10px] px-2"
-                            onClick={() => handleMarkAsRead(notification.notificationId)}
-                          >
-                            Mark Read
-                          </Button>
-                        )}
-                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          notification.status === 'PENDING' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {notification.status === 'PENDING' ? 'Unread' : 'Read'}
-                        </span>
-                      </div>
+          {loading ? (
+            <div className="border border-gray-200 rounded p-12 text-center">
+              <Loader2 className="h-5 w-5 animate-spin mx-auto text-gray-400" />
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="border border-gray-200 rounded p-12 text-center">
+              <Bell className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">You're all caught up</p>
+              <p className="text-xs text-gray-400 mt-1">No notifications at this time.</p>
+            </div>
+          ) : null}
+
+          {!loading && notifications.map((notification) => (
+            <div
+              key={notification.notificationId}
+              className={`border border-gray-200 rounded p-4 transition-colors ${
+                notification.status === "PENDING"
+                  ? "border-l-4 border-l-primary bg-primary/[0.02]"
+                  : "opacity-75"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 shrink-0">
+                  {getCategoryIcon(notification.category)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className={`text-xs font-medium ${notification.status === "PENDING" ? "text-gray-900" : "text-gray-600"}`}>
+                        {notification.title}
+                      </h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{notification.message}</p>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {timeAgo(notification.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {notification.status === "PENDING" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] px-2 border-gray-200"
+                          onClick={() => handleMarkAsRead(notification.notificationId)}
+                        >
+                          Mark Read
+                        </Button>
+                      )}
+                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        notification.status === "PENDING" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {notification.status === "PENDING" ? "Unread" : "Read"}
+                      </span>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       </div>

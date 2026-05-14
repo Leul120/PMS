@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
@@ -125,14 +123,14 @@ export default function ProfilePage() {
           </div>
 
           {/* Profile Card */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center px-4 py-3 border-b border-gray-100">
+              <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Account Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
+              </span>
+            </div>
+            <div className="p-4">
               {/* Avatar + role */}
               <div className="flex items-center gap-4 mb-4">
                 <Avatar className="h-14 w-14">
@@ -210,18 +208,18 @@ export default function ProfilePage() {
                   Save Profile
                 </Button>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Change Password Card */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700 flex items-center gap-2">
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex items-center px-4 py-3 border-b border-gray-100">
+              <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
                 <Shield className="h-4 w-4" />
                 Change Password
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
+              </span>
+            </div>
+            <div className="p-4">
               <form onSubmit={handleChangePassword} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="currentPassword" className="text-xs">Current Password</Label>
@@ -286,8 +284,8 @@ export default function ProfilePage() {
                   Change Password
                 </Button>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     </RequireRole>

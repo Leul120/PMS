@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,8 +10,6 @@ import { inventoryApi } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
 import { InventoryDialog } from "./inventory-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -38,15 +35,16 @@ import {
 } from "@/components/ui/table";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { 
-  Package, 
-  AlertTriangle, 
-  CheckCircle, 
+import {
+  Package,
+  AlertTriangle,
+  CheckCircle2,
   TrendingDown,
   Plus,
   Search,
-  Filter,
-  ArrowUpDown
+  Loader2,
+  ArrowRight,
+  PackageX,
 } from "lucide-react";
 
 interface InventoryItem {
@@ -119,7 +117,7 @@ export default function InventoryPage() {
         unit: item.unit || "pcs",
         location: item.location || "Main Warehouse",
         status: item.status || "normal",
-        lastUpdated: item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : "â€â€",
+        lastUpdated: item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : "—",
       }));
       setInventory(mapped);
       setFilteredInventory(mapped);
@@ -165,6 +163,13 @@ export default function InventoryPage() {
   const lowStock = inventory.filter((item) => item.quantity <= item.minStock && item.quantity > 0).length;
   const critical = inventory.filter((item) => item.quantity === 0).length;
 
+  const statCards = [
+    { label: "Total Units", value: totalItems.toLocaleString(), sub: `${inventory.length} product${inventory.length !== 1 ? "s" : ""}`, icon: Package },
+    { label: "In Stock", value: inStock, sub: "Above minimum level", icon: CheckCircle2 },
+    { label: "Low Stock", value: lowStock, sub: lowStock > 0 ? "Needs reorder soon" : "All levels healthy", icon: TrendingDown },
+    { label: "Out of Stock", value: critical, sub: critical > 0 ? "Needs immediate action" : "None depleted", icon: PackageX },
+  ];
+
   return (
     <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
     <DashboardLayout>
@@ -172,7 +177,7 @@ export default function InventoryPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Inventory</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Manage stock levels</p>
+            <p className="text-xs text-gray-500 mt-0.5">Track and manage stock levels across all locations</p>
           </div>
           <div className="flex gap-2">
             {canUpdateInventory && (
@@ -187,36 +192,32 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-3">
-          <Card className="border-0 shadow-sm bg-gray-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-gray-500">Total Items</p>
-              <p className="text-xl font-semibold text-gray-700 mt-1">{loading ? "-" : totalItems.toLocaleString()}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-emerald-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-emerald-600">In Stock</p>
-              <p className="text-xl font-semibold text-emerald-700 mt-1">{loading ? "-" : inStock}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-amber-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-amber-600">Low Stock</p>
-              <p className="text-xl font-semibold text-amber-700 mt-1">{loading ? "-" : lowStock}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-red-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-red-600">Critical</p>
-              <p className="text-xl font-semibold text-red-700 mt-1">{loading ? "-" : critical}</p>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+          {statCards.map(({ label, value, sub, icon: Icon }) => (
+            <div key={label} className="px-4 py-3 flex items-center gap-3">
+              <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                {!loading && sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
-            <CardTitle className="text-sm font-medium text-gray-700">Inventory Items</CardTitle>
+        {!loading && (critical > 0 || lowStock > 0) && (
+          <div className={`border-l-4 ${critical > 0 ? "border-red-400 bg-red-50" : "border-amber-400 bg-amber-50"} px-4 py-3 flex items-center gap-3`}>
+            <AlertTriangle className={`h-4 w-4 shrink-0 ${critical > 0 ? "text-red-600" : "text-amber-600"}`} />
+            <p className={`text-xs flex-1 ${critical > 0 ? "text-red-800" : "text-amber-800"}`}>
+              {critical > 0 && <><span className="font-semibold">{critical} item{critical > 1 ? "s" : ""}</span> {critical > 1 ? "are" : "is"} out of stock. </>}
+              {lowStock > 0 && <><span className="font-semibold">{lowStock} item{lowStock > 1 ? "s" : ""}</span> {lowStock > 1 ? "are" : "is"} running low.</>}
+            </p>
+          </div>
+        )}
+
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-700">Inventory Items</p>
             <div className="flex gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -239,68 +240,71 @@ export default function InventoryPage() {
                   ))}
                 </SelectContent>
               </Select>            </div>
-          </CardHeader>
-          <CardContent className="p-0">
+          </div>
+          <div>
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Item</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">SKU</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Category</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Location</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Stock Level</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
-                  <TableHead className="text-xs font-medium text-gray-500 py-2">Updated</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Item</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">SKU</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Category</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Quantity</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                  <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Last Updated</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <div className="flex items-center justify-center gap-2 text-gray-400 text-xs">
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-                        Loading...
-                      </div>
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-gray-400" />
                     </TableCell>
                   </TableRow>
                 ) : filteredInventory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500 text-xs">
-                      {searchQuery ? "No items match your search." : "No inventory items found. Add your first item."}
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <Package className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                      <p className="text-xs font-medium text-gray-500">
+                        {searchQuery ? "No items match your search." : "No inventory items yet."}
+                      </p>
+                      {!searchQuery && canUpdateInventory && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">Click "Add Item" to create your first inventory record.</p>
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (
                 filteredInventory.map((item) => {
-                  const percentage = item.maxStock > 0 ? (item.quantity / item.maxStock) * 100 : 0;
+                  const isCritical = item.quantity === 0;
+                  const isLow = !isCritical && item.quantity <= item.minStock;
                   return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{item.sku}</TableCell>
-                      <TableCell>{item.category}</TableCell>
-                      <TableCell>{item.location}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress value={percentage} className="w-20" />
-                          <span className="text-xs">{item.quantity} {item.unit}</span>
+                    <TableRow key={item.id} className={`hover:bg-gray-50 transition-colors ${isCritical ? "bg-red-50/40" : isLow ? "bg-amber-50/40" : ""}`}>
+                      <TableCell className="py-2.5">
+                        <p className="text-xs font-medium text-gray-900">{item.name}</p>
+                        {item.location && <p className="text-[10px] text-gray-400">{item.location}</p>}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-gray-500 py-2.5">{item.sku}</TableCell>
+                      <TableCell className="text-xs text-gray-600 py-2.5">{item.category}</TableCell>
+                      <TableCell className="py-2.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className={`text-sm font-semibold ${isCritical ? "text-red-600" : isLow ? "text-amber-600" : "text-gray-900"}`}>
+                            {item.quantity}
+                          </span>
+                          <span className="text-[10px] text-gray-400">{item.unit}</span>
                         </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">min {item.minStock} / max {item.maxStock}</p>
                       </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={
-                            item.status === "normal" ? "default" : 
-                            item.status === "low" ? "secondary" : "destructive"
-                          }
-                        >
-                          {item.status}
-                        </Badge>
+                      <TableCell className="py-2.5">
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${isCritical ? "bg-red-100 text-red-700" : isLow ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {isCritical ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
+                        </span>
                       </TableCell>
-                      <TableCell>{item.lastUpdated}</TableCell>
+                      <TableCell className="text-[10px] text-gray-500 py-2.5">{item.lastUpdated}</TableCell>
                     </TableRow>
                   );
                 }))}
               </TableBody>
             </Table>
-          </CardContent>
+          </div>
           <PaginationControls
             page={currentPage}
             totalPages={totalPages}
@@ -309,28 +313,28 @@ export default function InventoryPage() {
             onPageChange={(p) => setCurrentPage(p)}
             loading={loading}
           />
-        </Card>
+        </div>
       </div>
-      
-      <InventoryDialog 
-        open={dialogOpen} 
-        onOpenChange={setDialogOpen} 
-        onSuccess={loadInventory} 
+
+      <InventoryDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={loadInventory}
       />
 
       {/* Adjust Stock Dialog */}
       <Dialog open={adjustDialogOpen} onOpenChange={setAdjustDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[400px] rounded">
           <DialogHeader>
             <DialogTitle>Adjust Stock</DialogTitle>
             <DialogDescription>Update the quantity of an inventory item.</DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Select Item</Label>
-              <Select 
-                value={selectedItem?.id || ""} 
+              <Select
+                value={selectedItem?.id || ""}
                 onValueChange={(value) => setSelectedItem(inventory.find(i => i.id === value) || null)}
               >
                 <SelectTrigger>
@@ -345,7 +349,7 @@ export default function InventoryPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Quantity Change (+/-)</Label>
               <Input
@@ -359,7 +363,7 @@ export default function InventoryPage() {
               </p>
             </div>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdjustDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleAdjustStock}>Adjust Stock</Button>

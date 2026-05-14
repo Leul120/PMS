@@ -2,11 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -32,11 +29,8 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
 import {
-  Search,
-  Loader2,
-  MapPin,
-  Scale,
-  MessageSquare,
+  Search, Loader2, MapPin, Scale, MessageSquare, Filter,
+  Truck, CheckCircle2, Clock, AlertTriangle, Download, Plus,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -66,6 +60,7 @@ export default function DeliveriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -104,10 +99,11 @@ export default function DeliveriesPage() {
       let total = 0;
 
       // Pre-load vendor names so we never show raw IDs
+      const vendorMap = await getVendorNameMap().catch(() => new Map<string, string>());
+
       try {
-        const [data, vendorMap] = await Promise.all([
+        const [data] = await Promise.all([
           deliveryApi.getAll(page, PAGE_SIZE),
-          getVendorNameMap(),
         ]);
 
         const response = data;
@@ -141,7 +137,7 @@ export default function DeliveriesPage() {
           });
         }
       } catch {
-        // Delivery endpoint not available -- derive from POs
+        // Delivery endpoint not available — derive from POs
       }
 
       if (deliveryItems.length === 0) {
@@ -155,7 +151,7 @@ export default function DeliveriesPage() {
             const vendorId = String(po.vendorId || "");
             const vendorName =
               po.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "N/A");
-            const poId = String(po.id);
+            const poId = String(po.id || po.poId);
             const poNumber = po.poNumber || `PO-${poId.padStart(6, "0")}`;
             return {
               id: poId,
@@ -184,24 +180,25 @@ export default function DeliveriesPage() {
     }
   }
 
-  // Filter deliveries based on search query
+  // Filter deliveries based on search query and status filter
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredDeliveries(deliveries);
-    } else {
+    let filtered = deliveries;
+    if (statusFilter !== "ALL") {
+      filtered = filtered.filter((d) => d.status?.toUpperCase() === statusFilter);
+    }
+    if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      setFilteredDeliveries(
-        deliveries.filter(
-          (d) =>
-            d.poNumber?.toLowerCase().includes(query) ||
-            d.vendorName?.toLowerCase().includes(query) ||
-            d.vendor?.toLowerCase().includes(query) ||
-            d.status?.toLowerCase().includes(query) ||
-            d.trackingNumber?.toLowerCase().includes(query)
-        )
+      filtered = filtered.filter(
+        (d) =>
+          d.poNumber?.toLowerCase().includes(query) ||
+          d.vendorName?.toLowerCase().includes(query) ||
+          d.vendor?.toLowerCase().includes(query) ||
+          d.status?.toLowerCase().includes(query) ||
+          d.trackingNumber?.toLowerCase().includes(query)
       );
     }
-  }, [searchQuery, deliveries]);
+    setFilteredDeliveries(filtered);
+  }, [searchQuery, statusFilter, deliveries]);
 
   // Export deliveries to CSV
   function handleExport() {
@@ -302,70 +299,82 @@ export default function DeliveriesPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Deliveries</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Track shipments</p>
+              <p className="text-xs text-gray-500 mt-0.5">Track shipments from dispatch to receipt</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
-                Export
+              <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5" onClick={handleExport}>
+                <Download className="h-3.5 w-3.5" /> Export
               </Button>
               {canUpdateDelivery && (
-                <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
-                  Update Status
+                <Button size="sm" className="text-xs h-8 gap-1.5" onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> Log Delivery
                 </Button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
-            <Card className="border-0 shadow-sm bg-blue-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-blue-600">In Transit</p>
-                <p className="text-xl font-semibold text-blue-700 mt-1">
-                  {loading ? "-" : deliveries.filter((d) => d.status === "SHIPPED" || d.status === "IN_TRANSIT").length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-emerald-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-emerald-600">Delivered</p>
-                <p className="text-xl font-semibold text-emerald-700 mt-1">
-                  {loading ? "-" : deliveries.filter((d) => d.status === "DELIVERED").length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-amber-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-amber-600">Pending</p>
-                <p className="text-xl font-semibold text-amber-700 mt-1">
-                  {loading ? "-" : deliveries.filter((d) => d.status === "PENDING" || d.status === "SCHEDULED").length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-sm bg-red-50">
-              <CardContent className="p-3">
-                <p className="text-xs text-red-600">Delayed</p>
-                <p className="text-xl font-semibold text-red-700 mt-1">
-                  {loading ? "-" : deliveries.filter((d) => d.status === "DELAYED").length}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
-              <CardTitle className="text-sm font-medium text-gray-700">Delivery Tracking</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <Input
-                  type="search"
-                  placeholder="Search deliveries..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-[200px] h-8 text-xs border-gray-200"
-                />
+          {/* Stats */}
+          {(() => {
+            const inTransit = deliveries.filter(d => ["SHIPPED","IN_TRANSIT"].includes(d.status?.toUpperCase())).length;
+            const delivered = deliveries.filter(d => d.status?.toUpperCase() === "DELIVERED").length;
+            const pending = deliveries.filter(d => ["PENDING","SCHEDULED"].includes(d.status?.toUpperCase())).length;
+            const delayed = deliveries.filter(d => d.status?.toUpperCase() === "DELAYED").length;
+            const overdue = deliveries.filter(d => { const eta = d.eta || d.deliveryDate; return eta && new Date(eta) < new Date() && d.status?.toUpperCase() !== "DELIVERED"; }).length;
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+                {[
+                  { label: "In Transit", value: inTransit, icon: Truck },
+                  { label: "Delivered", value: delivered, icon: CheckCircle2 },
+                  { label: "Pending / Scheduled", value: pending, icon: Clock },
+                  { label: delayed > 0 ? `Delayed${overdue > 0 ? ` (${overdue} overdue)` : ""}` : "Delayed", value: delayed, icon: AlertTriangle },
+                ].map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="px-4 py-3 flex items-center gap-3">
+                    <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                      {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
+            );
+          })()}
+
+          <div className="border border-gray-200 rounded overflow-hidden">
+            <div className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Delivery Tracking</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{filteredDeliveries.length} shipment{filteredDeliveries.length !== 1 ? "s" : ""}</p>
+              </div>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <Input
+                    type="search"
+                    placeholder="Search deliveries..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 w-[200px] h-8 text-xs border-gray-200"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[140px]">
+                    <Filter className="mr-1.5 h-3.5 w-3.5" />
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Statuses</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+                    <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
+                    <SelectItem value="SHIPPED">Shipped</SelectItem>
+                    <SelectItem value="DELIVERED">Delivered</SelectItem>
+                    <SelectItem value="DELAYED">Delayed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -373,67 +382,69 @@ export default function DeliveriesPage() {
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Delivery #</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">PO Reference</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Vendor</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Progress</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Route</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Carrier</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">ETA</TableHead>
-                      <TableHead className="text-xs font-medium text-gray-500 py-2">Actions</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Delivery #</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Purchase Order</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Route</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Carrier</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Expected Date</TableHead>
+                      <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredDeliveries.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-gray-500 text-xs">
-                          No deliveries found.
+                        <TableCell colSpan={8} className="text-center py-12">
+                          <Truck className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                          <p className="text-sm font-medium text-gray-600">
+                            {searchQuery || statusFilter !== "ALL" ? "No deliveries match your filter" : "No deliveries yet"}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {searchQuery || statusFilter !== "ALL" ? "Try adjusting your search or filter" : "Deliveries will appear here once orders are shipped"}
+                          </p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredDeliveries.map((delivery) => (
-                        <TableRow key={delivery.id}>
-                          {/* Show formatted delivery number instead of raw ID */}
-                          <TableCell className="font-medium text-xs">
+                      filteredDeliveries.map((delivery) => {
+                        const etaDate = delivery.eta ? new Date(delivery.eta) : delivery.deliveryDate ? new Date(delivery.deliveryDate) : null;
+                        const isOverdue = etaDate && etaDate < new Date() && delivery.status?.toUpperCase() !== "DELIVERED";
+
+                        return (
+                        <TableRow key={delivery.id} className={`hover:bg-gray-50 transition-colors ${isOverdue ? "bg-red-50/30" : ""}`}>
+                          <TableCell className="font-medium text-xs font-mono">
                             DEL-{delivery.id.padStart(6, "0")}
                           </TableCell>
-                          {/* Show formatted PO number instead of raw poId */}
-                          <TableCell className="text-xs">{delivery.poNumber}</TableCell>
-                          <TableCell className="text-xs">{delivery.vendorName || delivery.vendor || "N/A"}</TableCell>
+                          <TableCell className="text-xs font-medium">{delivery.poNumber}</TableCell>
+                          <TableCell className="text-xs text-gray-700">{delivery.vendorName || delivery.vendor || "—"}</TableCell>
                           <TableCell>
-                            <Badge
-                              variant={
-                                delivery.status?.toUpperCase() === "DELIVERED"
-                                  ? "default"
-                                  : delivery.status?.toUpperCase() === "IN_TRANSIT"
-                                  ? "secondary"
-                                  : "outline"
-                              }
-                            >
-                              {delivery.status?.replace(/_/g, " ") || "Unknown"}
-                            </Badge>
+                            {(() => {
+                              const statusUp = delivery.status?.toUpperCase();
+                              const cls = statusUp === "DELIVERED" ? "bg-emerald-100 text-emerald-700"
+                                : statusUp === "DELAYED" ? "bg-red-100 text-red-700"
+                                : ["IN_TRANSIT","SHIPPED"].includes(statusUp || "") ? "bg-blue-100 text-blue-700"
+                                : "bg-gray-100 text-gray-600";
+                              return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{delivery.status?.replace(/_/g, " ") || "Unknown"}</span>;
+                            })()}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Progress value={delivery.progress || 0} className="w-20" />
-                              <span className="text-xs">{delivery.progress || 0}%</span>
+                            <div className="flex items-center gap-1 text-xs text-gray-600">
+                              <MapPin className="h-3 w-3 shrink-0 text-gray-400" />
+                              <span className="truncate max-w-[120px]">{delivery.origin || "Supplier"} → {delivery.destination || "Warehouse"}</span>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1 text-xs">
-                              <MapPin className="h-3 w-3" />
-                              {delivery.origin || "Supplier"} &rarr; {delivery.destination || "Warehouse"}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-xs">{delivery.carrier || "N/A"}</TableCell>
+                          <TableCell className="text-xs text-gray-600">{delivery.carrier || <span className="text-gray-400">—</span>}</TableCell>
                           <TableCell className="text-xs">
-                            {delivery.eta
-                              ? new Date(delivery.eta).toLocaleDateString()
-                              : delivery.deliveryDate
-                              ? new Date(delivery.deliveryDate).toLocaleDateString()
-                              : "N/A"}
+                            {etaDate ? (
+                              <span className={isOverdue ? "text-red-600 font-medium" : "text-gray-600"}>
+                                {isOverdue && <AlertTriangle className="h-3 w-3 inline mr-1" />}
+                                {etaDate.toLocaleDateString()}
+                                {isOverdue && <span className="text-[10px] block text-red-500">Overdue</span>}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
@@ -476,12 +487,13 @@ export default function DeliveriesPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
+            </div>
             <PaginationControls
               page={currentPage}
               totalPages={totalPages}
@@ -490,14 +502,14 @@ export default function DeliveriesPage() {
               onPageChange={(p) => setCurrentPage(p)}
               loading={loading}
             />
-          </Card>
+          </div>
         </div>
 
         <DeliveryDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={loadDeliveries} />
 
         {/* 3-Way Match Dialog */}
         <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
-          <DialogContent className="sm:max-w-[440px]">
+          <DialogContent className="sm:max-w-[440px] rounded">
             <DialogHeader>
               <DialogTitle>3-Way Match Validation</DialogTitle>
               <DialogDescription>
@@ -579,7 +591,7 @@ export default function DeliveriesPage() {
 
         {/* Raise Dispute Dialog */}
         <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
-          <DialogContent className="sm:max-w-[440px]">
+          <DialogContent className="sm:max-w-[440px] rounded">
             <DialogHeader>
               <DialogTitle>Raise Dispute</DialogTitle>
               <DialogDescription>

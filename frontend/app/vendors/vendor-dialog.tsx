@@ -53,7 +53,7 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
       const data = await vendorApi.getCategories();
       setCategories(data as any[]);
     } catch {
-      // fall back to empty list — user can type ID manually
+      // fall back to empty list
     } finally {
       setLoadingCategories(false);
     }
@@ -61,12 +61,11 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.companyName.trim()) newErrors.companyName = "Company name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      newErrors.email = "Invalid email format";
-    if (!formData.contactPerson.trim()) newErrors.contactPerson = "Contact person is required";
-    if (!formData.categoryId) newErrors.categoryId = "Category is required";
+    if (!formData.companyName.trim()) newErrors.companyName = "Required";
+    if (!formData.email.trim()) newErrors.email = "Required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email";
+    if (!formData.contactPerson.trim()) newErrors.contactPerson = "Required";
+    if (!formData.categoryId) newErrors.categoryId = "Required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -75,7 +74,6 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     e.preventDefault();
     if (!validateForm()) return;
     setIsSubmitting(true);
-
     try {
       await vendorApi.register({
         companyName: formData.companyName,
@@ -86,11 +84,7 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
         address: formData.address || undefined,
         taxId: formData.taxId || undefined,
       });
-
-      toast({
-        title: "Vendor created",
-        description: `${formData.companyName} has been added successfully.`,
-      });
+      toast({ title: "Vendor created", description: `${formData.companyName} has been added.` });
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -104,103 +98,100 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     }
   };
 
+  const field = (id: string, label: string, required = false) => (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs font-medium">{label}{required ? " *" : ""}</Label>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[480px] rounded">
         <DialogHeader>
-          <DialogTitle>Add New Vendor</DialogTitle>
-          <DialogDescription>Register a new vendor to your supplier network.</DialogDescription>
+          <DialogTitle className="text-sm font-semibold">Add New Vendor</DialogTitle>
+          <DialogDescription className="text-xs">Register a new vendor to your supplier network.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="companyName">Company Name *</Label>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="companyName" className="text-xs font-medium">Company Name *</Label>
             <Input
               id="companyName"
               value={formData.companyName}
-              onChange={(e) => {
-                setFormData({ ...formData, companyName: e.target.value });
-                if (errors.companyName) setErrors({ ...errors, companyName: "" });
-              }}
-              placeholder="Enter company name"
-              className={errors.companyName ? "border-red-500" : ""}
+              onChange={(e) => { setFormData({ ...formData, companyName: e.target.value }); if (errors.companyName) setErrors({ ...errors, companyName: "" }); }}
+              placeholder="Acme Corp"
+              className={`h-8 text-xs border-gray-200 ${errors.companyName ? "border-red-400" : ""}`}
             />
-            {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
+            {errors.companyName && <p className="text-[10px] text-red-500">{errors.companyName}</p>}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="contactPerson">Contact Person *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="contactPerson" className="text-xs font-medium">Contact Person *</Label>
             <Input
               id="contactPerson"
               value={formData.contactPerson}
-              onChange={(e) => {
-                setFormData({ ...formData, contactPerson: e.target.value });
-                if (errors.contactPerson) setErrors({ ...errors, contactPerson: "" });
-              }}
-              placeholder="Enter contact person name"
-              className={errors.contactPerson ? "border-red-500" : ""}
+              onChange={(e) => { setFormData({ ...formData, contactPerson: e.target.value }); if (errors.contactPerson) setErrors({ ...errors, contactPerson: "" }); }}
+              placeholder="Jane Smith"
+              className={`h-8 text-xs border-gray-200 ${errors.contactPerson ? "border-red-400" : ""}`}
             />
-            {errors.contactPerson && <p className="text-xs text-red-500">{errors.contactPerson}</p>}
+            {errors.contactPerson && <p className="text-[10px] text-red-500">{errors.contactPerson}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-xs font-medium">Email *</Label>
               <Input
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => {
-                  setFormData({ ...formData, email: e.target.value });
-                  if (errors.email) setErrors({ ...errors, email: "" });
-                }}
+                onChange={(e) => { setFormData({ ...formData, email: e.target.value }); if (errors.email) setErrors({ ...errors, email: "" }); }}
                 placeholder="vendor@company.com"
-                className={errors.email ? "border-red-500" : ""}
+                className={`h-8 text-xs border-gray-200 ${errors.email ? "border-red-400" : ""}`}
               />
-              {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+              {errors.email && <p className="text-[10px] text-red-500">{errors.email}</p>}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber">Phone Number</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="phoneNumber" className="text-xs font-medium">Phone</Label>
               <Input
                 id="phoneNumber"
                 value={formData.phoneNumber}
                 onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                 placeholder="+1 234 567 890"
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="address" className="text-xs font-medium">Address</Label>
             <Input
               id="address"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              placeholder="Enter company address"
+              placeholder="123 Business St, City"
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="taxId">Tax ID</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="taxId" className="text-xs font-medium">Tax ID</Label>
               <Input
                 id="taxId"
                 value={formData.taxId}
                 onChange={(e) => setFormData({ ...formData, taxId: e.target.value })}
-                placeholder="Tax identification number"
+                placeholder="Tax ID number"
+                className="h-8 text-xs border-gray-200"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="categoryId">Category *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="categoryId" className="text-xs font-medium">Category *</Label>
               {categories.length > 0 ? (
                 <Select
                   value={formData.categoryId}
-                  onValueChange={(v) => {
-                    setFormData({ ...formData, categoryId: v });
-                    if (errors.categoryId) setErrors({ ...errors, categoryId: "" });
-                  }}
+                  onValueChange={(v) => { setFormData({ ...formData, categoryId: v }); if (errors.categoryId) setErrors({ ...errors, categoryId: "" }); }}
                 >
-                  <SelectTrigger id="categoryId" className={errors.categoryId ? "border-red-500" : ""}>
+                  <SelectTrigger id="categoryId" className={`h-8 text-xs ${errors.categoryId ? "border-red-400" : ""}`}>
                     <SelectValue placeholder={loadingCategories ? "Loading..." : "Select category"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -219,19 +210,20 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                   placeholder={loadingCategories ? "Loading..." : "Category ID"}
                   disabled={loadingCategories}
+                  className="h-8 text-xs border-gray-200"
                 />
               )}
-              {errors.categoryId && <p className="text-xs text-red-500">{errors.categoryId}</p>}
+              {errors.categoryId && <p className="text-[10px] text-red-500">{errors.categoryId}</p>}
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Vendor
+            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Add Vendor
             </Button>
           </DialogFooter>
         </form>

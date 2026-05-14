@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -43,17 +41,21 @@ import {
 } from "@/components/ui/dialog";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { 
-  Search, 
-  Plus, 
-  MoreHorizontal, 
+import {
+  Search,
+  Plus,
+  MoreHorizontal,
   Filter,
   Download,
   Loader2,
   FileText,
   Eye,
   ShoppingCart,
-  Ban
+  Ban,
+  Users,
+  CheckCircle2,
+  Star,
+  Building2,
 } from "lucide-react";
 
 interface Vendor {
@@ -104,7 +106,7 @@ export default function VendorsPage() {
   const canDelete = hasPermission("vendors:delete");
 
   useEffect(() => {
-    // Only fetch if user has access â€â€ avoids 400/403 errors for unauthorized roles
+    // Only fetch if user has access — avoids 400/403 errors for unauthorized roles
     if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
     loadVendors(currentPage);
   }, [currentPage]);
@@ -174,7 +176,7 @@ export default function VendorsPage() {
       v.totalOrders || "",
       v.compliance || ""
     ]);
-    
+
     const csvContent = [headers.join(","), ...rows.map(r => r.map(cell => `"${cell}"`).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -183,7 +185,7 @@ export default function VendorsPage() {
     a.download = `vendors-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-    
+
     toast({ title: "Export Complete", description: `${filteredVendors.length} vendors exported to CSV` });
   }
 
@@ -209,7 +211,7 @@ export default function VendorsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Vendors</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Manage vendor relationships</p>
+            <p className="text-xs text-gray-500 mt-0.5">Manage supplier relationships and track performance</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
@@ -217,7 +219,7 @@ export default function VendorsPage() {
               Export
             </Button>
             {canCreate && (
-            <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
+            <Button size="sm" className="text-xs h-8" onClick={() => { setSelectedVendor(null); setDialogOpen(true); }}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Add Vendor
             </Button>
@@ -226,7 +228,7 @@ export default function VendorsPage() {
         </div>
 
         {error && (
-          <div className="rounded-md bg-destructive/15 p-4 text-destructive">
+          <div className="border-l-4 border-red-400 bg-red-50 px-4 py-3 text-xs text-red-700">
             <p>{error}</p>
             <Button variant="outline" size="sm" onClick={() => loadVendors(currentPage)} className="mt-2">
               Retry
@@ -235,43 +237,36 @@ export default function VendorsPage() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-3">
-          <Card className="border-0 shadow-sm bg-gray-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-gray-500">Total Vendors</p>
-              <p className="text-xl font-semibold text-gray-900 mt-1">{loading ? "-" : vendors.length}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-emerald-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-emerald-600">Verified</p>
-              <p className="text-xl font-semibold text-emerald-700 mt-1">
-                {loading ? "-" : vendors.filter((v) => v.verified).length}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-blue-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-blue-600">Active</p>
-              <p className="text-xl font-semibold text-blue-700 mt-1">
-                {loading ? "-" : vendors.filter((v) => v.status === "ACTIVE").length}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm bg-amber-50">
-            <CardContent className="p-3">
-              <p className="text-xs text-amber-600">Avg Rating</p>
-              <p className="text-xl font-semibold text-amber-700 mt-1">
-                {loading ? "-" : (vendors.reduce((acc, v) => acc + (v.rating || 0), 0) / (vendors.length || 1)).toFixed(1)}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        {(() => {
+          const activeCount = vendors.filter(v => v.status === "ACTIVE").length;
+          const verifiedCount = vendors.filter(v => v.verified).length;
+          const pendingCount = vendors.filter(v => !v.verified).length;
+          const avgRating = vendors.length > 0 ? (vendors.reduce((acc, v) => acc + (v.rating || 0), 0) / vendors.length) : 0;
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
+              {[
+                { label: "Total Vendors", value: vendors.length, sub: `${activeCount} active`, icon: Building2 },
+                { label: "Verified", value: verifiedCount, sub: "Approved suppliers", icon: CheckCircle2 },
+                { label: "Pending Verification", value: pendingCount, sub: pendingCount > 0 ? "Needs review" : "All verified", icon: Users },
+                { label: "Avg Rating", value: avgRating.toFixed(1), sub: "Across all vendors", icon: Star },
+              ].map(({ label, value, sub, icon: Icon }) => (
+                <div key={label} className="px-4 py-3 flex items-center gap-3">
+                  <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+                    {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
+                    {!loading && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Vendors Table */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
-            <CardTitle className="text-sm font-medium text-gray-700">Vendor Directory</CardTitle>
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-700">Vendor Directory</p>
             <div className="flex gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -292,11 +287,12 @@ export default function VendorsPage() {
                   <SelectItem value="ALL">All</SelectItem>
                   <SelectItem value="ACTIVE">Active</SelectItem>
                   <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="Verified">Verified</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
                 </SelectContent>
-              </Select>            </div>
-          </CardHeader>
-          <CardContent className="p-0">
+              </Select>
+            </div>
+          </div>
+          <div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -304,27 +300,33 @@ export default function VendorsPage() {
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Vendor</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Category</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Verified</TableHead>
-                    <TableHead className="text-right text-xs font-medium text-gray-500 py-2">Actions</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Vendor</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Category</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Verification</TableHead>
+                    <TableHead className="text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {vendors.length === 0 ? (
+                  {filteredVendors.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-gray-500 text-xs">
-                        No vendors found. Add your first vendor to get started.
+                      <TableCell colSpan={5} className="text-center py-12">
+                        <Building2 className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs font-medium text-gray-500">
+                          {vendors.length === 0 ? "No vendors yet." : "No vendors match your search."}
+                        </p>
+                        {vendors.length === 0 && canCreate && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">Click "Add Vendor" to register your first supplier.</p>
+                        )}
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredVendors.map((vendor) => (
-                      <TableRow key={vendor.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <TableRow key={vendor.id} className="hover:bg-gray-50 transition-colors">
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-2.5">
-                            <Avatar className="h-7 w-7">
+                            <Avatar className="h-7 w-7 shrink-0">
                               <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                                 {(vendor.companyName || "V").substring(0, 2).toUpperCase()}
                               </AvatarFallback>
@@ -332,27 +334,16 @@ export default function VendorsPage() {
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-gray-900 truncate">{vendor.companyName || "Unknown"}</p>
                               <p className="text-[10px] text-gray-500 truncate">{vendor.email}</p>
+                              {vendor.phone && <p className="text-[10px] text-gray-400">{vendor.phone}</p>}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="py-2.5 text-xs text-gray-600">{vendor.category || "Uncategorized"}</TableCell>
                         <TableCell className="py-2.5">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${
-                            vendor.status === "ACTIVE" 
-                              ? "bg-emerald-100 text-emerald-700" 
-                              : "bg-gray-100 text-gray-600"
-                          }`}>
-                            {vendor.status}
-                          </span>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${vendor.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700" : vendor.status === "INACTIVE" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{vendor.status}</span>
                         </TableCell>
                         <TableCell className="py-2.5">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${
-                            vendor.verified 
-                              ? "bg-emerald-100 text-emerald-700" 
-                              : "bg-amber-100 text-amber-700"
-                          }`}>
-                            {vendor.verified ? "Verified" : "Pending"}
-                          </span>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${vendor.verified ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{vendor.verified ? "Verified" : "Pending"}</span>
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -372,7 +363,7 @@ export default function VendorsPage() {
                                 <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
                                 View Orders
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 className="text-xs"
                                 onClick={() => {
                                   setSelectedVendor(vendor);
@@ -389,8 +380,8 @@ export default function VendorsPage() {
                                     toast({ title: "Vendor verified", description: `${vendor.companyName} has been verified.` });
                                     loadVendors();
                                   } catch (error) {
-                                    toast({ 
-                                      title: "Error", 
+                                    toast({
+                                      title: "Error",
                                       description: error instanceof Error ? error.message : "Failed to verify vendor",
                                       variant: "destructive"
                                     });
@@ -402,8 +393,8 @@ export default function VendorsPage() {
                               {canDelete && (
                                 <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="text-xs text-red-600" 
+                              <DropdownMenuItem
+                                className="text-xs text-red-600"
                                 onClick={() => { setVendorToDeactivate(vendor); setDeactivateDialogOpen(true); }}
                               >
                                 <Ban className="h-3.5 w-3.5 mr-1.5" />
@@ -420,7 +411,7 @@ export default function VendorsPage() {
                 </TableBody>
               </Table>
             )}
-          </CardContent>
+          </div>
           <PaginationControls
             page={currentPage}
             totalPages={totalPages}
@@ -429,13 +420,13 @@ export default function VendorsPage() {
             onPageChange={(p) => setCurrentPage(p)}
             loading={loading}
           />
-        </Card>
+        </div>
       </div>
-      
-      <VendorDialog 
-        open={dialogOpen} 
-        onOpenChange={setDialogOpen} 
-        onSuccess={() => loadVendors(currentPage)} 
+
+      <VendorDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={() => loadVendors(currentPage)}
       />
       <VendorDocumentDialog
         open={documentDialogOpen}
@@ -446,7 +437,7 @@ export default function VendorsPage() {
 
       {/* Deactivate Confirm Dialog */}
       <Dialog open={deactivateDialogOpen} onOpenChange={setDeactivateDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[400px] rounded">
           <DialogHeader>
             <DialogTitle>Deactivate Vendor</DialogTitle>
             <DialogDescription>
@@ -466,5 +457,3 @@ export default function VendorsPage() {
     </RequireRole>
   );
 }
-
-

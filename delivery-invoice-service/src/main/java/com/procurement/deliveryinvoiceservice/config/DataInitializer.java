@@ -121,6 +121,7 @@ public class DataInitializer implements CommandLineRunner {
         // Invoice 1 — PO 1 (Server Room Renovation, $115,000) — paid, no discrepancy
         Invoice i1 = new Invoice();
         i1.setPoId(1L);
+        i1.setVendorId(7L);  // BuildRight Ltd (vendor2)
         i1.setInvoiceAmount(new BigDecimal("115000.00"));
         i1.setStatus("PAID");
         i1.setInvoiceDate(LocalDate.now().minusDays(8));
@@ -129,6 +130,7 @@ public class DataInitializer implements CommandLineRunner {
         // Invoice 2 — PO 2 (Stationery dispatch, $11,200) — pending, goods in transit
         Invoice i2 = new Invoice();
         i2.setPoId(2L);
+        i2.setVendorId(8L);  // OfficeEssentials Inc (vendor3)
         i2.setInvoiceAmount(new BigDecimal("11200.00"));
         i2.setStatus("PENDING");
         i2.setInvoiceDate(LocalDate.now().minusDays(2));
@@ -137,6 +139,7 @@ public class DataInitializer implements CommandLineRunner {
         // Invoice 3 — PO 3 (Furniture, $42,000) — under review, PO not yet approved
         Invoice i3 = new Invoice();
         i3.setPoId(3L);
+        i3.setVendorId(10L);  // FurniturePlus LLC (vendor5)
         i3.setInvoiceAmount(new BigDecimal("42000.00"));
         i3.setStatus("UNDER_REVIEW");
         i3.setInvoiceDate(LocalDate.now().minusDays(1));
@@ -146,6 +149,7 @@ public class DataInitializer implements CommandLineRunner {
         // Vendor invoiced full $10,800 but only 810/900 reams delivered → should be $9,720
         Invoice i4 = new Invoice();
         i4.setPoId(5L);
+        i4.setVendorId(8L);  // OfficeEssentials Inc (vendor3)
         i4.setInvoiceAmount(new BigDecimal("10800.00"));
         i4.setStatus("DISPUTED");
         i4.setInvoiceDate(LocalDate.now().minusDays(28));
@@ -157,6 +161,7 @@ public class DataInitializer implements CommandLineRunner {
         // Invoice 5 — PO 5 credit note / revised invoice after dispute resolution
         Invoice i5 = new Invoice();
         i5.setPoId(5L);
+        i5.setVendorId(8L);  // OfficeEssentials Inc (vendor3)
         i5.setInvoiceAmount(new BigDecimal("9720.00"));
         i5.setStatus("PAID");
         i5.setInvoiceDate(LocalDate.now().minusDays(20));

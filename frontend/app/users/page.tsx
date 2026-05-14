@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -27,7 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UserDialog } from "./user-dialog";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { Plus, Search, MoreHorizontal, Mail, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Mail, Loader2, AlertTriangle, Users, UserCheck, Shield, UserX, Download } from "lucide-react";
 
 interface User {
   id: string;
@@ -69,9 +67,9 @@ export default function UsersPage() {
     try {
       setLoading(true);
       setError(null);
-      // Only ADMIN can list all users â€â€ other roles get an empty list gracefully
+      // Only ADMIN can list all users — other roles get an empty list gracefully
       const data = await authApi.getAllUsers().catch((err) => {
-        // 403 means the role can't list users â€â€ show empty state, not an error
+        // 403 means the role can't list users — show empty state, not an error
         if (err?.message?.includes("permission") || err?.message?.includes("403")) {
           return [];
         }
@@ -174,11 +172,13 @@ export default function UsersPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Users</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Manage system users</p>
+            <p className="text-xs text-gray-500 mt-0.5">Create and manage user accounts and role assignments</p>
           </div>
           <div className="flex gap-2">
             {canManageUsers && (
-              <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>Export</Button>
+              <Button variant="outline" size="sm" className="text-xs h-8" onClick={handleExport}>
+                <Download className="mr-1.5 h-3.5 w-3.5" />Export
+              </Button>
             )}
             {canManageUsers && (
             <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
@@ -188,25 +188,28 @@ export default function UsersPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: "Total Users", value: users.length, color: "bg-gray-50 text-gray-700" },
-            { label: "Active", value: users.filter(u => u.active).length, color: "bg-emerald-50 text-emerald-700" },
-            { label: "Admins", value: users.filter(u => u.role?.toUpperCase() === "ADMIN").length, color: "bg-amber-50 text-amber-700" },
-            { label: "Inactive", value: users.filter(u => !u.active).length, color: "bg-red-50 text-red-700" },
-          ].map(({ label, value, color }) => (
-            <Card key={label} className="border-0 shadow-sm">
-              <CardContent className={`p-3 ${color.split(" ")[0]}`}>
-                <p className={`text-xs ${color.split(" ")[1]}`}>{label}</p>
-                <p className={`text-xl font-semibold mt-1 ${color.split(" ")[1]}`}>{value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {!loading && (
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-gray-200 border border-gray-200 rounded">
+            {[
+              { label: "Total Users", value: users.length, icon: Users },
+              { label: "Active", value: users.filter(u => u.active).length, icon: UserCheck },
+              { label: "Admins", value: users.filter(u => u.role?.toUpperCase() === "ADMIN").length, icon: Shield },
+              { label: "Inactive", value: users.filter(u => !u.active).length, icon: UserX },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="px-4 py-3 flex items-center gap-3">
+                <Icon className="h-4 w-4 text-gray-400 shrink-0" />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+                  <p className="text-lg font-semibold text-gray-900">{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between py-3 px-4 border-b border-gray-100">
-            <CardTitle className="text-sm font-medium text-gray-700">User Directory</CardTitle>
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <span className="text-xs font-medium text-gray-700">User Directory</span>
             <div className="flex gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
@@ -219,8 +222,8 @@ export default function UsersPage() {
                 Refresh
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
+          </div>
+          <div>
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -237,26 +240,29 @@ export default function UsersPage() {
             {!loading && !error && (
               <Table>
                 <TableHeader>
-                  <TableRow className="border-b border-gray-100 hover:bg-transparent">
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">User</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Role</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Status</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-500 py-2">Joined</TableHead>
-                    <TableHead className="text-right text-xs font-medium text-gray-500 py-2">Actions</TableHead>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">User</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Role</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Status</TableHead>
+                    <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Joined</TableHead>
+                    <TableHead className="text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wide py-2">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-gray-500 text-xs">
-                        {searchQuery ? "No users match your search." : "No users found."}
+                      <TableCell colSpan={5} className="text-center py-12">
+                        <Users className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                        <p className="text-xs font-medium text-gray-500">
+                          {searchQuery ? "No users match your search." : "No users found."}
+                        </p>
                       </TableCell>
                     </TableRow>
                   ) : filteredUsers.map((user) => {
                     const fullName = `${user.firstName} ${user.lastName}`.trim() || user.email;
                     const initials = ((user.firstName?.[0] || "") + (user.lastName?.[0] || "")).toUpperCase() || "U";
                     return (
-                      <TableRow key={user.id}>
+                      <TableRow key={user.id} className="hover:bg-gray-50 transition-colors">
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
@@ -272,12 +278,12 @@ export default function UsersPage() {
                         </TableCell>
                         <TableCell className="text-xs">{user.role}</TableCell>
                         <TableCell>
-                          <Badge variant={user.active ? "success" : "secondary"} className="text-[10px]">
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${user.active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"}`}>
                             {user.active ? "Active" : "Inactive"}
-                          </Badge>
+                          </span>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "â€â€"}
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -316,15 +322,15 @@ export default function UsersPage() {
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <UserDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={loadUsers} />
 
       {/* Edit Role Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-[380px]">
+        <DialogContent className="sm:max-w-[380px] rounded">
           <DialogHeader>
             <DialogTitle>Edit User Role</DialogTitle>
             <DialogDescription>
@@ -360,7 +366,7 @@ export default function UsersPage() {
 
       {/* Deactivate/Activate Confirm Dialog */}
       <Dialog open={deactivateDialogOpen} onOpenChange={setDeactivateDialogOpen}>
-        <DialogContent className="sm:max-w-[380px]">
+        <DialogContent className="sm:max-w-[380px] rounded">
           <DialogHeader>
             <DialogTitle>{userToToggle?.active ? "Deactivate" : "Activate"} User</DialogTitle>
             <DialogDescription>
@@ -387,4 +393,3 @@ export default function UsersPage() {
     </RequireRole>
   );
 }
-

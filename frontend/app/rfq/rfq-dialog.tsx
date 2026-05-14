@@ -9,9 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { rfqApi, requisitionApi, vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-
-
+import { Loader2, CheckCircle2 } from "lucide-react";
 
 interface RFQDialogProps {
   open: boolean;
@@ -34,24 +32,19 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     expectedQuantity: "",
   });
 
-  // Load approved requisitions when dialog opens — only for non-vendor roles
   useEffect(() => {
     if (!open) return;
-    // Load categories from vendor-service
     vendorApi.getCategories().then((cats: any[]) => {
       setCategories(cats.map((c: any) => ({ id: c.categoryId, name: c.categoryName })));
     }).catch(() => {});
-    // VENDORs don't have permission to read requisitions (403) — skip the call
     const stored = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
     const role: string = stored ? (JSON.parse(stored)?.state?.user?.role ?? "") : "";
     if (role === "VENDOR") return;
     requisitionApi.getAll(0, 100).then((res) => {
-      const items = (res.content ?? []).filter((r: any) => r.status === "APPROVED");
-      setRequisitions(items);
+      setRequisitions((res.content ?? []).filter((r: any) => r.status === "APPROVED"));
     }).catch(() => {});
   }, [open]);
 
-  // Pre-fill form from selected requisition
   function handleRequisitionSelect(reqId: string) {
     setSelectedReqId(reqId);
     if (!reqId) return;
@@ -68,7 +61,6 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
       await rfqApi.create({
         ...formData,
@@ -77,22 +69,10 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
         expectedQuantity: parseInt(formData.expectedQuantity) || undefined,
         deadline: new Date(formData.deadline).toISOString(),
       });
-      
-      toast({
-        title: "RFQ created",
-        description: "Request for quotation has been created successfully.",
-      });
-      
+      toast({ title: "RFQ created", description: "Request for quotation sent to vendors." });
       onSuccess();
       onOpenChange(false);
-      setFormData({
-        title: "",
-        description: "",
-        deadline: "",
-        estimatedValue: "",
-        categoryId: "",
-        expectedQuantity: "",
-      });
+      setFormData({ title: "", description: "", deadline: "", estimatedValue: "", categoryId: "", expectedQuantity: "" });
       setSelectedReqId("");
     } catch (error) {
       toast({
@@ -107,24 +87,21 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[540px] rounded">
         <DialogHeader>
-          <DialogTitle>Create RFQ</DialogTitle>
-          <DialogDescription>
-            Create a new request for quotation to send to vendors.
+          <DialogTitle className="text-sm font-semibold">Create RFQ</DialogTitle>
+          <DialogDescription className="text-xs">
+            Create a request for quotation and invite vendors to submit bids.
           </DialogDescription>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Optional: pre-fill from approved requisition */}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
           {requisitions.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="requisitionId" className="text-xs text-gray-500">
-                Pre-fill from Approved Requisition (optional)
-              </Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-gray-500">Pre-fill from Requisition (optional)</Label>
               <Select value={selectedReqId} onValueChange={handleRequisitionSelect}>
-                <SelectTrigger id="requisitionId" className="h-8 text-xs">
-                  <SelectValue placeholder="Select a requisition to pre-fill..." />
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select an approved requisition…" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">— None —</SelectItem>
@@ -136,99 +113,98 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
                 </SelectContent>
               </Select>
               {selectedReqId && (
-                <p className="text-[10px] text-emerald-600">✓ Form pre-filled from requisition</p>
+                <p className="text-[10px] text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Form pre-filled from requisition
+                </p>
               )}
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="title" className="text-xs font-medium">Title *</Label>
             <Input
               id="title"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               placeholder="Enter RFQ title"
               required
+              className="h-8 text-xs border-gray-200"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="description" className="text-xs font-medium">Description</Label>
             <Textarea
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Describe the goods or services needed"
-              rows={3}
+              rows={2}
+              className="text-xs border-gray-200 resize-none"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="deadline">Deadline *</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="deadline" className="text-xs font-medium">Deadline *</Label>
               <Input
                 id="deadline"
                 type="datetime-local"
                 value={formData.deadline}
                 onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                 required
+                className="h-8 text-xs border-gray-200"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="estimatedValue">Estimated Value ($)</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="estimatedValue" className="text-xs font-medium">Estimated Value ($)</Label>
               <Input
                 id="estimatedValue"
                 type="number"
                 value={formData.estimatedValue}
                 onChange={(e) => setFormData({ ...formData, estimatedValue: e.target.value })}
                 placeholder="0.00"
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="categoryId">Category *</Label>
-              <Select
-                value={formData.categoryId}
-                onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
-              >
-                <SelectTrigger id="categoryId">
-                  <SelectValue placeholder="Select a category" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="categoryId" className="text-xs font-medium">Category *</Label>
+              <Select value={formData.categoryId} onValueChange={(v) => setFormData({ ...formData, categoryId: v })}>
+                <SelectTrigger id="categoryId" className="h-8 text-xs">
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {(categories.length > 0 ? categories : [
-                    { id: 1, name: "IT" },
-                    { id: 2, name: "Construction" },
-                    { id: 3, name: "Stationery" },
-                    { id: 4, name: "Electronics" },
-                    { id: 5, name: "Furniture" },
+                    { id: 1, name: "IT" }, { id: 2, name: "Construction" },
+                    { id: 3, name: "Stationery" }, { id: 4, name: "Electronics" }, { id: 5, name: "Furniture" },
                   ]).map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id.toString()}>
-                      {cat.name}
-                    </SelectItem>
+                    <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="expectedQuantity">Expected Quantity</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="expectedQuantity" className="text-xs font-medium">Expected Quantity</Label>
               <Input
                 id="expectedQuantity"
                 type="number"
                 value={formData.expectedQuantity}
                 onChange={(e) => setFormData({ ...formData, expectedQuantity: e.target.value })}
-                placeholder="e.g., 100"
+                placeholder="e.g. 100"
+                className="h-8 text-xs border-gray-200"
               />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="pt-1">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs rounded" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" size="sm" className="h-8 text-xs rounded" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Create RFQ
             </Button>
           </DialogFooter>
