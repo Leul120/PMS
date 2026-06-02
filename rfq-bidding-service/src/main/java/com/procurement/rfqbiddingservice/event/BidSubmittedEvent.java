@@ -13,9 +13,13 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BidSubmittedEvent {
+    private Long tenantId;
     private Long bidId;
     private Long rfqId;
     private Long vendorId;
     private BigDecimal bidAmount;
     private LocalDateTime submittedAt;
+    private String vendorName;
+    private String rfqCreatorEmail;
+    private String rfqTitle;
 }

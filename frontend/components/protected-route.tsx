@@ -6,7 +6,7 @@ import { useAuthStore, validateAndCleanAuth } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
 import { Loader2 } from "lucide-react";
 
-const publicRoutes = ["/login", "/register", "/forgot-password", "/reset-password"];
+const publicRoutes = ["/login", "/register", "/forgot-password", "/reset-password", "/vendor-register"];
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();

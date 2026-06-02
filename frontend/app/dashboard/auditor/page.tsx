@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { RequireRole } from "@/components/require-role";
-import { poApi, vendorApi, rfqApi, auditApi, authApi, getVendorNameMap } from "@/lib/api";
+import { poApi, vendorApi, rfqApi, auditApi, authApi, getVendorNameMap, getUserNameMap } from "@/lib/api";
+import { displayUserName, displayVendorName } from "@/lib/display";
 import { useAuthStore } from "@/lib/auth-store";
 import Link from "next/link";
 import {
@@ -41,17 +42,18 @@ export default function AuditorDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "AUDITOR"])) return;
+    if (!hasRole(["ADMIN", "AUDITOR", "SUPER_ADMIN"])) return;
 
     async function load() {
       try {
         setLoading(true);
 
-        const [poList, vendorMap, rfqs, logs] = await Promise.all([
+        const [poList, vendorMap, rfqs, logs, userMap] = await Promise.all([
           poApi.getAllList().catch(() => []),
           getVendorNameMap(),
           rfqApi.getAllList().catch(() => []),
           auditApi.getAll().catch(() => []),
+          getUserNameMap().catch(() => new Map<string, string>()),
         ]);
 
         // ── Stats ──────────────────────────────────────────────────────────
@@ -92,10 +94,11 @@ export default function AuditorDashboardPage() {
                 `PO-${String(po.poId || po.id).padStart(6, "0")}`,
               // vendorName is already resolved by PurchaseOrderService via VendorClient
               // Fall back to vendorMap (Map<vendorId, companyName>) if missing
-              vendorName:
-                po.vendorName ||
-                vendorMap?.get(String(po.vendorId || "")) ||
-                (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+              vendorName: displayVendorName(po.vendorId, {
+                name: po.vendorName,
+                map: vendorMap,
+                empty: "N/A",
+              }),
               totalAmount: Number(po.totalAmount) || 0,
               status: po.status,
               createdAt: po.createdAt || po.issueDate,
@@ -119,14 +122,12 @@ export default function AuditorDashboardPage() {
         );
 
         // ── User name map for audit log display ────────────────────────────
-        // UserResponse fields: userId (Long), fullName (String), email (String)
-        const users = await authApi.getAllUsers().catch(() => []);
-        const uMap = new Map<string, string>();
+        const users = await authApi.getAllUsersList().catch(() => []);
+        const uMap = new Map<string, string>(userMap);
         (users as any[]).forEach((u: any) => {
           const id = String(u.userId || u.id || "");
-          // fullName is the primary display field; fall back to email
-          const name = u.fullName || u.email || `User #${id}`;
-          if (id) uMap.set(id, name);
+          const name = displayUserName(id, { fullName: u.fullName, email: u.email, unknown: "" });
+          if (id && name) uMap.set(id, name);
         });
 
         // ── Audit logs ─────────────────────────────────────────────────────
@@ -140,9 +141,7 @@ export default function AuditorDashboardPage() {
             actionType: l.actionType || "UNKNOWN",
             entityAffected: l.entityAffected || "--",
             // Show fullName resolved from UserResponse.userId; "System" for null userId
-            performedBy: uid
-              ? uMap.get(uid) || `User #${uid}`
-              : "System",
+            performedBy: displayUserName(uid, { map: uMap }),
             timestamp: l.timestamp || l.createdAt,
             newValue: l.newValue || null,
           };
@@ -178,9 +177,8 @@ export default function AuditorDashboardPage() {
 
   // ── Export ───────────────────────────────────────────────────────────────
   function exportAuditLogs() {
-    const headers = ["ID", "Action", "Entity", "Performed By", "Timestamp", "Change"];
+    const headers = ["Action", "Entity", "Performed By", "Timestamp", "Change"];
     const rows = filteredLogs.map((l) => [
-      l.id,
       l.actionType,
       l.entityAffected,
       l.performedBy,
@@ -214,7 +212,7 @@ export default function AuditorDashboardPage() {
   ];
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "AUDITOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "AUDITOR", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
           {/* Header */}

@@ -1,5 +1,6 @@
 package com.procurement.scoringservice.controller;
 
+import com.procurement.scoringservice.entity.VendorCompositeScore;
 import com.procurement.scoringservice.entity.VendorPerformanceRecord;
 import com.procurement.scoringservice.entity.VendorScore;
 import com.procurement.scoringservice.service.ScoringService;
@@ -83,7 +84,17 @@ public class ScoringController {
     }
 
     @GetMapping("/ranking")
-    public ResponseEntity<List<VendorScore>> getRanking() {
-        return ResponseEntity.ok(scoringService.getAllScoresRanked());
+    public ResponseEntity<List<VendorCompositeScore>> getRanking() {
+        return ResponseEntity.ok(scoringService.getAllCompositeScoresRanked());
+    }
+
+    /** Recalculates scores for all vendors that have prior delivery data. */
+    @PostMapping("/recalculate-all")
+    public ResponseEntity<Map<String, Object>> recalculateAll() {
+        int count = scoringService.recalculateAllVendors();
+        return ResponseEntity.ok(Map.of(
+            "message", "Bulk recalculation completed.",
+            "vendorsProcessed", count
+        ));
     }
 }

@@ -17,7 +17,8 @@ public class VendorDocumentResponse {
     private Long vendorId;
     private String documentType;
     private String documentName;
-    private String fileUrl;
+    private String originalFilename;
+    private String contentType;
     private LocalDate issueDate;
     private LocalDate expiryDate;
     private String status;

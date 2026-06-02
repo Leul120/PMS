@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,10 +21,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { poApi, getVendorNameMap } from "@/lib/api";
+import { poApi, getCompanyNameMap, poStatusQuery, resolveVendorIdsFromSearch } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
 import { useToast } from "@/hooks/use-toast";
-import { PODialog } from "../procurement/po-dialog";
 import { DeliveryDialog } from "../deliveries/delivery-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
@@ -35,10 +35,11 @@ import {
 } from "@/components/ui/dialog";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
+import { useListDeepLink } from "@/hooks/use-list-deep-link";
+import { ProcurementPipelineBanner } from "@/components/procurement-pipeline-banner";
+import { WorkflowNextStep } from "@/components/workflow-next-step";
 import {
-  Plus,
   Search,
-  Filter,
   MoreHorizontal,
   Package,
   Truck,
@@ -46,7 +47,29 @@ import {
   Clock,
   Loader2,
   ShoppingCart,
+  Download,
 } from "lucide-react";
+
+function exportOrdersToCSV(orders: any[]) {
+  const headers = ["PO Number", "Vendor", "Amount", "Status", "Order Date", "Expected Delivery", "Tracking Number"];
+  const rows = orders.map((o) => [
+    o.poNumber || "",
+    o.companyName || "",
+    o.totalAmount ?? "",
+    o.status || "",
+    o.createdAt ? new Date(o.createdAt).toLocaleDateString() : "",
+    o.deliveryDate ? new Date(o.deliveryDate).toLocaleDateString() : "",
+    o.trackingNumber || "",
+  ]);
+  const csv = [headers, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `purchase-orders-${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function daysAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -61,7 +84,7 @@ interface Order {
   poNumber: string;
   title?: string;
   description?: string;
-  vendorName?: string;
+  companyName?: string;
   totalAmount: number;
   status: string;
   deliveryStatus?: string;
@@ -76,7 +99,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -87,34 +110,41 @@ export default function OrdersPage() {
   const { toast } = useToast();
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
-  const canCreatePO = hasPermission("po:create");
   const canLogDelivery = hasPermission("deliveries:update");
+  const canExport = hasPermission("reports:view");
 
   // Delivery dialog pre-filled from PO
   const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [deliveryPOId, setDeliveryPOId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"])) return;
-    loadOrders(currentPage);
-  }, [currentPage]);
-
-  async function loadOrders(page = 0) {
+  const loadOrders = useCallback(async (page = 0) => {
     try {
       setLoading(true);
-      const [response, vendorMap] = await Promise.all([
-        poApi.getAll(page, PAGE_SIZE),
-        getVendorNameMap(),
+      const vendorMap = await getCompanyNameMap();
+      const vendorIds = resolveVendorIdsFromSearch(debouncedSearch, Object.fromEntries(vendorMap));
+      const [response] = await Promise.all([
+        poApi.getAll({
+          page,
+          size: PAGE_SIZE,
+          search: debouncedSearch,
+          vendorIds: vendorIds.length ? vendorIds : undefined,
+          ...poStatusQuery(statusFilter),
+          sort: "id-desc",
+        }),
       ]);
       const items = response.content ?? [];
       const normalised = items.map((po: any) => {
         const vendorId = String(po.vendorId || '');
-        const vendorName = po.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : 'N/A');
+        const companyName = displayVendorName(vendorId, {
+          name: po.vendorName || po.companyName,
+          map: vendorMap,
+          empty: "N/A",
+        });
         return {
           ...po,
           id: String(po.id || po.poId),
           poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-          vendorName,
+          companyName,
           createdAt: po.createdAt || po.issueDate,
           deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
           totalAmount: Number(po.totalAmount) || 0,
@@ -129,27 +159,23 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [debouncedSearch, statusFilter]);
 
-  // Filter orders based on search query and status filter
   useEffect(() => {
-    let filtered = orders;
-    if (statusFilter !== "ALL") {
-      filtered = filtered.filter(o => o.status === statusFilter);
-    }
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (o) =>
-          o.poNumber?.toLowerCase().includes(query) ||
-          o.vendorName?.toLowerCase().includes(query) ||
-          o.description?.toLowerCase().includes(query) ||
-          o.status?.toLowerCase().includes(query) ||
-          o.trackingNumber?.toLowerCase().includes(query)
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [searchQuery, orders, statusFilter]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"])) return;
+    loadOrders(currentPage);
+  }, [currentPage, loadOrders]);
+
+  useListDeepLink(orders, loading, (order) => setDetailOrder(order), { paramNames: ["id"] });
 
   const getStatusVariant = (status: string) => {
     const s = status?.toLowerCase() || "";
@@ -163,20 +189,22 @@ export default function OrdersPage() {
 
   const isPending = (s: string) => s?.toLowerCase().includes("pending") || s?.toLowerCase() === "draft";
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
     <DashboardLayout>
       <div className="space-y-4">
+        <ProcurementPipelineBanner activeStep="fulfillment" />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Order Fulfillment</h1>
             <p className="text-xs text-gray-500 mt-0.5">Track orders, deliveries, and receipts</p>
           </div>
-          {canCreatePO && (
-          <Button size="sm" className="text-xs h-8" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Order
-          </Button>
-          )}
+          <div className="flex gap-2">
+            {canExport && filteredOrders.length > 0 && (
+              <Button size="sm" variant="outline" className="text-xs h-8 gap-1.5" onClick={() => exportOrdersToCSV(filteredOrders)}>
+                <Download className="h-3.5 w-3.5" />Export CSV
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -245,6 +273,8 @@ export default function OrdersPage() {
                       <SelectItem value="Approved">Approved</SelectItem>
                       <SelectItem value="Pending Approval">Pending</SelectItem>
                       <SelectItem value="Rejected">Rejected</SelectItem>
+                      <SelectItem value="Shipped">Shipped / In Transit</SelectItem>
+                      <SelectItem value="Delivered">Delivered</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -271,15 +301,15 @@ export default function OrdersPage() {
                       <TableRow><TableCell colSpan={7} className="text-center py-12">
                         <Package className="h-6 w-6 text-gray-300 mx-auto mb-2" />
                         <p className="text-xs font-medium text-gray-500">No orders found.</p>
-                        {canCreatePO && <p className="text-[10px] text-gray-400 mt-0.5">Click "New Order" to create a purchase order.</p>}
+                        <p className="text-[10px] text-gray-400 mt-0.5">Approved purchase orders from Procurement appear here for fulfillment tracking.</p>
                       </TableCell></TableRow>
                     ) : filteredOrders.map((order) => (
-                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setDetailOrder(order)}>
                         <TableCell className="py-2.5">
                           <p className="text-xs font-medium font-mono">{order.poNumber}</p>
                           {order.description && <p className="text-[10px] text-gray-400 truncate max-w-[140px]">{order.description}</p>}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.companyName || "N/A"}</TableCell>
                         <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
                         <TableCell className="py-2.5">
                           {(() => {
@@ -298,7 +328,7 @@ export default function OrdersPage() {
                         <TableCell className="text-[10px] text-gray-500 py-2.5">
                           {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "—"}
                         </TableCell>
-                        <TableCell className="py-2.5 text-right">
+                        <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -363,12 +393,12 @@ export default function OrdersPage() {
                         <p className="text-xs text-gray-500">No orders currently processing.</p>
                       </TableCell></TableRow>
                     ) : orders.filter(o => isPending(o.status) || o.status?.toLowerCase() === "processing").map((order) => (
-                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setDetailOrder(order)}>
                         <TableCell className="py-2.5">
                           <p className="text-xs font-medium font-mono">{order.poNumber}</p>
                           {order.createdAt && <p className="text-[10px] text-gray-400">{daysAgo(order.createdAt)}</p>}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.companyName || "N/A"}</TableCell>
                         <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
                         <TableCell className="py-2.5">
                           {(() => {
@@ -411,12 +441,12 @@ export default function OrdersPage() {
                         <p className="text-xs text-gray-500">No orders currently in transit.</p>
                       </TableCell></TableRow>
                     ) : orders.filter(o => o.status?.toLowerCase() === "shipped" || o.status?.toLowerCase() === "in_transit" || o.deliveryStatus?.toLowerCase() === "shipped").map((order) => (
-                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setDetailOrder(order)}>
                         <TableCell className="py-2.5">
                           <p className="text-xs font-medium font-mono">{order.poNumber}</p>
                           {order.createdAt && <p className="text-[10px] text-gray-400">{daysAgo(order.createdAt)}</p>}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.companyName || "N/A"}</TableCell>
                         <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
                         <TableCell className="text-xs text-gray-500 py-2.5 font-mono">
                           {order.trackingNumber || <span className="text-gray-400">No tracking</span>}
@@ -451,11 +481,11 @@ export default function OrdersPage() {
                         <p className="text-xs text-gray-500">No deliveries completed yet.</p>
                       </TableCell></TableRow>
                     ) : orders.filter(o => o.status?.toLowerCase() === "delivered" || o.deliveryStatus?.toLowerCase() === "delivered").map((order) => (
-                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors">
+                      <TableRow key={order.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setDetailOrder(order)}>
                         <TableCell className="py-2.5">
                           <p className="text-xs font-medium font-mono">{order.poNumber}</p>
                         </TableCell>
-                        <TableCell className="text-xs text-gray-600 py-2.5">{order.vendorName || "N/A"}</TableCell>
+                        <TableCell className="text-xs text-gray-600 py-2.5">{order.companyName || "N/A"}</TableCell>
                         <TableCell className="text-xs font-semibold text-gray-900 py-2.5">${order.totalAmount?.toLocaleString() || 0}</TableCell>
                         <TableCell className="text-[10px] text-gray-500 py-2.5">
                           {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : "—"}
@@ -469,12 +499,6 @@ export default function OrdersPage() {
           </TabsContent>
         </Tabs>
       </div>
-
-      <PODialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSuccess={loadOrders}
-      />
 
       <DeliveryDialog
         open={deliveryDialogOpen}
@@ -505,7 +529,7 @@ export default function OrdersPage() {
                   })()}
                 </div>
                 <div><p className="text-xs text-gray-500">Vendor</p>
-                  <p className="font-medium">{detailOrder.vendorName || "N/A"}</p></div>
+                  <p className="font-medium">{detailOrder.companyName || "N/A"}</p></div>
                 <div><p className="text-xs text-gray-500">Total Amount</p>
                   <p className="font-medium text-lg">${detailOrder.totalAmount?.toLocaleString()}</p></div>
                 <div><p className="text-xs text-gray-500">Order Date</p>
@@ -521,9 +545,40 @@ export default function OrdersPage() {
                 <div><p className="text-xs text-gray-500">Description</p>
                   <p className="mt-0.5 text-gray-700">{detailOrder.description || detailOrder.title}</p></div>
               )}
+              {canLogDelivery &&
+                (detailOrder.status?.toLowerCase().includes("approved") ||
+                  detailOrder.status?.toLowerCase() === "delivered") && (
+                <WorkflowNextStep
+                  message="Record goods received against this purchase order."
+                  href={`/deliveries?poId=${detailOrder.id}`}
+                  linkLabel="Log Delivery"
+                  variant="blue"
+                />
+              )}
+              {(detailOrder.status?.toLowerCase() === "delivered" ||
+                detailOrder.deliveryStatus?.toLowerCase() === "delivered") && (
+                <WorkflowNextStep
+                  message="Delivery complete — validate vendor invoice (3-way match)."
+                  href={`/invoices?poId=${detailOrder.id}`}
+                  linkLabel="Invoices"
+                />
+              )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {canLogDelivery && detailOrder && (
+              <Button
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setDeliveryPOId(detailOrder.id);
+                  setDeliveryDialogOpen(true);
+                  setDetailOrder(null);
+                }}
+              >
+                Log Delivery Here
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setDetailOrder(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>

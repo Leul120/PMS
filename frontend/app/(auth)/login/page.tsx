@@ -10,50 +10,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
-import { useAuthStore, User } from "@/lib/auth-store";
+import { useAuthStore } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
-
-// Map backend login response to frontend User format
-function mapLoginResponse(response: any): User {
-  // Handle null/undefined response
-  if (!response) {
-    return {
-      id: "",
-      userId: "",
-      email: "",
-      firstName: "",
-      lastName: "",
-      fullName: "",
-      role: "VENDOR",
-      roleName: "VENDOR",
-      active: false,
-    };
-  }
-
-  // Backend returns flattened structure: accessToken, tokenType, userId, email, fullName, role
-  const fullName = response.fullName || "";
-  const nameParts = fullName.split(" ");
-  const firstName = nameParts[0] || "";
-  const lastName = nameParts.slice(1).join(" ") || "";
-
-  return {
-    id: String(response.userId || ""),
-    userId: String(response.userId || ""),
-    email: response.email || "",
-    firstName,
-    lastName,
-    fullName,
-    role: (response.role as User["role"]) || "VENDOR",
-    roleName: (response.role as User["roleName"]) || undefined,
-    active: true,
-  };
-}
+import { mapLoginToUser, sessionMetaFromLogin } from "@/lib/login-response";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [tenantDomain, setTenantDomain] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
@@ -64,9 +30,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await authApi.login(email, password);
-      const user = mapLoginResponse(response);
-      setAuth(user, response.accessToken);
+      const response = await authApi.login(email, password, tenantDomain.trim() || undefined);
+      const user = mapLoginToUser(response);
+      const meta = sessionMetaFromLogin(response);
+      setAuth(user, response.accessToken, meta.tenant, {
+        organizationType: meta.organizationType,
+        operatingContext: meta.operatingContext,
+        availableContexts: meta.availableContexts,
+        supplierRole: meta.supplierRole,
+      });
       // Store remember-me preference so the session persists across browser restarts
       if (rememberMe) {
         localStorage.setItem("rememberMe", "true");
@@ -76,13 +48,20 @@ export default function LoginPage() {
         // clear auth on next cold load if the tab was fully closed
         sessionStorage.setItem("sessionActive", "true");
       }
-      toast({
-        title: "Welcome back!",
-        description: `Signed in as ${user.firstName} ${user.lastName}`,
-      });
-      // Redirect based on user role
-      const dashboardPath = getDashboardByRole(user.role);
-      router.push(dashboardPath);
+      if (response.mustChangePassword) {
+        toast({
+          title: "Welcome! Please change your password",
+          description: "Your administrator requires you to set a new password before continuing.",
+        });
+        router.push("/settings?tab=security&changePassword=1");
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: `Signed in as ${user.firstName} ${user.lastName}`,
+        });
+        const dashboardPath = getDashboardByRole(user.role);
+        router.push(dashboardPath);
+      }
     } catch (error) {
       toast({
         title: "Authentication failed",
@@ -189,6 +168,23 @@ export default function LoginPage() {
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <Label htmlFor="tenantDomain" className="text-xs font-medium">
+                    Organization domain
+                  </Label>
+                  <Input
+                    id="tenantDomain"
+                    type="text"
+                    placeholder="e.g. acme.com"
+                    value={tenantDomain}
+                    onChange={(e) => setTenantDomain(e.target.value)}
+                    className="h-9 text-xs border-gray-200"
+                  />
+                  <p className="text-[10px] text-gray-400">
+                    Required for organization accounts. Leave empty only if signing into the default workspace.
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -235,11 +231,15 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="px-6 pb-5">
+            <div className="px-6 pb-5 space-y-2">
               <p className="text-center text-xs text-gray-500">
-                Don&apos;t have an account?{" "}
-                <Link href="/register" className="font-medium text-primary hover:text-primary/80">
-                  Sign up
+                No account?{" "}
+                <span className="text-gray-400">Contact your organization administrator.</span>
+              </p>
+              <p className="text-center text-xs text-gray-500">
+                Are you a vendor?{" "}
+                <Link href="/vendor-register" className="text-primary font-medium hover:text-primary/80">
+                  Register your company
                 </Link>
               </p>
             </div>

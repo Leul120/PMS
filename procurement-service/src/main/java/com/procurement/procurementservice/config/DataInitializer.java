@@ -167,6 +167,7 @@ public class DataInitializer implements CommandLineRunner {
                                     String status, Integer approvalLevel,
                                     LocalDateTime createdAt) {
         PurchaseRequisition p = new PurchaseRequisition();
+        p.setTenantId(1L);
         p.setRequisitionNumber(number);
         p.setRequesterId(requesterId);
         p.setDepartment(department);
@@ -182,6 +183,7 @@ public class DataInitializer implements CommandLineRunner {
     private RequisitionItem item(PurchaseRequisition pr, String name, String description,
                                   Integer qty, String unit, BigDecimal unitPrice, String category) {
         RequisitionItem i = new RequisitionItem();
+        i.setTenantId(1L);
         i.setRequisition(pr);
         i.setItemName(name);
         i.setDescription(description);
@@ -196,6 +198,7 @@ public class DataInitializer implements CommandLineRunner {
                                       Integer level, String decision, String comments,
                                       LocalDateTime approvedAt) {
         ApprovalHistory a = new ApprovalHistory();
+        a.setTenantId(1L);
         a.setRequisition(pr);
         a.setApproverId(approverId);
         a.setApproverRole(role);
@@ -217,6 +220,7 @@ public class DataInitializer implements CommandLineRunner {
         // ── PO-001: Closed – Server Room Renovation (BuildRight, $115,000) ─────
         // Full lifecycle: Approved → Delivered → Invoice Paid → Three-way match → Closed
         PurchaseOrder po1 = new PurchaseOrder();
+        po1.setTenantId(1L);
         po1.setRfqId(4L);           // RFQ 4: Server Room Renovation (Awarded)
         po1.setVendorId(2L);        // BuildRight Ltd
         po1.setTotalAmount(new BigDecimal("115000.00"));
@@ -232,6 +236,7 @@ public class DataInitializer implements CommandLineRunner {
         // ── PO-002: Dispatched – Annual Stationery Supply (OfficeEssentials, $11,200) ─
         // In transit — delivery expected in 5 days, invoice submitted but under dispute
         PurchaseOrder po2 = new PurchaseOrder();
+        po2.setTenantId(1L);
         po2.setRfqId(3L);           // RFQ 3: Annual Stationery Supply (Closed)
         po2.setVendorId(3L);        // OfficeEssentials Inc
         po2.setTotalAmount(new BigDecimal("11200.00"));
@@ -247,6 +252,7 @@ public class DataInitializer implements CommandLineRunner {
         // ── PO-003: Pending Approval – Office Furniture Refresh (FurniturePlus, $42,000) ─
         // Awaiting david (manager) approval — standing desks are out of stock
         PurchaseOrder po3 = new PurchaseOrder();
+        po3.setTenantId(1L);
         po3.setRfqId(2L);           // RFQ 2: Office Furniture Refresh (Open)
         po3.setVendorId(5L);        // FurniturePlus LLC
         po3.setTotalAmount(new BigDecimal("42000.00"));
@@ -260,6 +266,7 @@ public class DataInitializer implements CommandLineRunner {
         // ── PO-004: Approved – Laptop Procurement (TechSupply, $72,000) ────────
         // Approved and awaiting delivery — PR-2025-001 converted to this PO
         PurchaseOrder po4 = new PurchaseOrder();
+        po4.setTenantId(1L);
         po4.setRfqId(1L);           // RFQ 1: Laptop Procurement (Open)
         po4.setVendorId(1L);        // TechSupply Corp
         po4.setTotalAmount(new BigDecimal("72000.00"));
@@ -275,6 +282,7 @@ public class DataInitializer implements CommandLineRunner {
         // ── PO-005: Closed – Stationery Supply Q1 2025 (OfficeEssentials, $10,800) ─
         // Fully closed after dispute resolution — 810/900 reams delivered, revised invoice paid
         PurchaseOrder po5 = new PurchaseOrder();
+        po5.setTenantId(1L);
         po5.setRfqId(6L);           // RFQ 6: Stationery Supply Q1 2025 (Closed/Awarded)
         po5.setVendorId(3L);        // OfficeEssentials Inc
         po5.setTotalAmount(new BigDecimal("10800.00"));
@@ -291,6 +299,7 @@ public class DataInitializer implements CommandLineRunner {
         // New PO raised after PR-2025-003 approved and RFQ 5 bidding closed
         // Awaiting vendor delivery — delivery expected in 14 days
         PurchaseOrder po6 = new PurchaseOrder();
+        po6.setTenantId(1L);
         po6.setRfqId(5L);           // RFQ 5: Network Equipment Upgrade (Open, ElectroWorld leading)
         po6.setVendorId(4L);        // ElectroWorld Co
         po6.setTotalAmount(new BigDecimal("33000.00"));

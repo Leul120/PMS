@@ -33,9 +33,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/notifications").hasAnyRole("ADMIN", "OFFICER")
-                .requestMatchers(HttpMethod.GET, "/api/notifications/user/{userId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/notifications/user/{userId}/unread").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.POST, "/api/notifications/{id}/read").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/notifications/user/{userId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "REQUESTER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "VENDOR_LOGISTICS")
+                .requestMatchers(HttpMethod.GET, "/api/notifications/user/{userId}/unread").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "REQUESTER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "VENDOR_LOGISTICS")
+                .requestMatchers(HttpMethod.POST, "/api/notifications/{id}/read").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "REQUESTER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "VENDOR_LOGISTICS")
                 .requestMatchers(HttpMethod.POST, "/api/notifications/{id}/send").hasAnyRole("ADMIN", "OFFICER")
                 .anyRequest().authenticated()
             )
@@ -48,8 +48,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

@@ -7,6 +7,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +50,11 @@ public class CachedVendorService {
     /**
      * Create vendor with distributed lock.
      */
+    @Retryable(
+        retryFor = { CannotAcquireLockException.class, DeadlockLoserDataAccessException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
     @DistributedLock(key = "'vendor:create:' + #vendor.email", waitTime = 5, leaseTime = 30)
     @Transactional
     public Vendor createVendor(Vendor vendor) {
@@ -61,6 +70,11 @@ public class CachedVendorService {
     /**
      * Update vendor with lock and cache eviction.
      */
+    @Retryable(
+        retryFor = { CannotAcquireLockException.class, DeadlockLoserDataAccessException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
     @DistributedLock(key = "'vendor:update:' + #vendorId", waitTime = 10, leaseTime = 30)
     @CacheEvict(value = "vendors", key = "'vendor-service:vendors:by-id:' + #vendorId")
     @Transactional
@@ -91,6 +105,11 @@ public class CachedVendorService {
     /**
      * Delete vendor with lock and cache eviction.
      */
+    @Retryable(
+        retryFor = { CannotAcquireLockException.class, DeadlockLoserDataAccessException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
     @DistributedLock(key = "'vendor:delete:' + #vendorId", waitTime = 5, leaseTime = 15)
     @CacheEvict(value = "vendors", key = "'vendor-service:vendors:by-id:' + #vendorId")
     @Transactional

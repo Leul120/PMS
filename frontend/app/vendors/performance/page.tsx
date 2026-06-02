@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { scoringApi, vendorApi, getVendorNameMap } from "@/lib/api";
+import { scoringApi, vendorApi, getCompanyNameMap } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart,
@@ -61,7 +62,7 @@ export default function PerformancePage() {
   const { toast } = useToast();
   const user = useAuthStore((state) => state.user);
   const hasRole = useAuthStore((state) => state.hasRole);
-  const isVendor = hasRole(["VENDOR"]);
+  const isVendor = hasRole(["VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE"]);
 
   const [scores, setScores] = useState<VendorScore[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,7 +98,7 @@ export default function PerformancePage() {
         // Admin/Manager/Officer/Auditor: fetch full ranking + vendor names
         const [ranking, vendorNameMap] = await Promise.all([
           scoringApi.getRanking().catch(() => []),
-          getVendorNameMap(),
+          getCompanyNameMap(),
         ]);
         setScores((ranking as any[]).map((r) => normaliseScore(r, vendorNameMap)));
       }
@@ -112,8 +113,8 @@ export default function PerformancePage() {
     const vendorId = String(raw.vendorId || raw.id || "");
     return {
       vendorId,
-      companyName: vendorNameMap?.get(vendorId) || raw.companyName || raw.vendorName || `Vendor #${vendorId}`,
-      overallScore: Number(raw.overallScore ?? raw.weightedScore ?? raw.score ?? 0),
+      companyName: displayVendorName(vendorId, { name: raw.companyName, map: vendorNameMap }),
+      overallScore: Number(raw.overallScore ?? raw.weightedScore ?? raw.finalWeightedScore ?? raw.score ?? 0),
       timeliness: Number(raw.timeliness ?? raw.timelinessScore ?? 0),
       quality: Number(raw.quality ?? raw.qualityScore ?? 0),
       cost: Number(raw.cost ?? raw.costScore ?? 0),
@@ -125,11 +126,13 @@ export default function PerformancePage() {
   }
 
   async function handleRecalculateAll() {
-    if (scores.length === 0) return;
     setRecalculatingAll(true);
     try {
-      await Promise.all(scores.map((s) => scoringApi.calculate(s.vendorId).catch(() => {})));
-      toast({ title: "All Scores Recalculated", description: "Vendor scores have been updated." });
+      const result = await scoringApi.recalculateAll();
+      toast({
+        title: "All Scores Recalculated",
+        description: `${result.vendorsProcessed} vendor score(s) have been updated.`,
+      });
       await load();
     } catch {
       toast({ title: "Error", description: "Failed to recalculate all scores.", variant: "destructive" });
@@ -205,7 +208,7 @@ export default function PerformancePage() {
   // Vendor self-view
   if (isVendor) {
     return (
-      <RequireRole allowedRoles={["VENDOR"]}>
+      <RequireRole allowedRoles={["VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
         <DashboardLayout>
           <div className="space-y-4">
             <div>
@@ -303,7 +306,7 @@ export default function PerformancePage() {
 
   // Admin / Manager / Officer / Auditor view
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
           <div className="flex items-center justify-between">

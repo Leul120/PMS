@@ -10,7 +10,8 @@ import java.util.Optional;
 
 @Repository
 public interface VendorCompositeScoreRepository extends JpaRepository<VendorCompositeScore, Long> {
-    Optional<VendorCompositeScore> findByVendorId(Long vendorId);
+    Optional<VendorCompositeScore> findTopByVendorIdOrderByCalculatedAtDesc(Long vendorId);
+    Optional<VendorCompositeScore> findTopByVendorIdAndPeriodOrderByCalculatedAtDesc(Long vendorId, String period);
     List<VendorCompositeScore> findByRiskLevel(String riskLevel);
     List<VendorCompositeScore> findByFinalWeightedScoreGreaterThanEqual(BigDecimal score);
     List<VendorCompositeScore> findByFinalWeightedScoreBetween(BigDecimal min, BigDecimal max);

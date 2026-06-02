@@ -170,6 +170,7 @@ public class DataInitializer implements CommandLineRunner {
     private void save(String code, String name, String description, int qty, int min, int max,
                       String unit, String location, String category) {
         InventoryItem item = new InventoryItem();
+        item.setTenantId(1L);
         item.setItemCode(code);
         item.setName(name);
         item.setDescription(description);

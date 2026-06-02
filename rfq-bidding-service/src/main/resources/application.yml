@@ -7,10 +7,12 @@ spring:
       enabled: true
   application:
     name: rfq-bidding-service
+  transaction:
+    default-timeout: 30
   datasource:
-    url: jdbc:postgresql://localhost:5434/rfqdb
-    username: postgres
-    password: secret
+    url: ${DB_URL:jdbc:postgresql://localhost:5434/rfqdb}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:secret}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -18,6 +20,9 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # Bounds how long SELECT ... FOR UPDATE waits on a row lock before failing
+      # (Postgres default is to wait forever). Paired with @Retryable on submitBid.
+      connection-init-sql: SET lock_timeout = '10s'
   jpa:
     open-in-view: false
     hibernate:
@@ -40,6 +45,8 @@ spring:
     consumer:
       group-id: rfq-service-group
       auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "com.procurement.*,java.util.*"
     listener:
       missing-topics-fatal: false
   data:
@@ -60,6 +67,8 @@ services:
     url: ${AUTH_SERVICE_URL:http://localhost:8081}
   vendor:
     url: ${VENDOR_SERVICE_URL:http://localhost:8082}
+  scoring:
+    url: ${SCORING_SERVICE_URL:http://localhost:8086}
 
 resilience4j:
   circuitbreaker:
@@ -74,11 +83,13 @@ resilience4j:
         baseConfig: default
       vendorService:
         baseConfig: default
+      scoringService:
+        baseConfig: default
 
 jwt:
   secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 logging:
   level:
-    com.procurement: DEBUG
+    com.procurement: INFO
 
 

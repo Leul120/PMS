@@ -4,6 +4,7 @@ import com.procurement.authservice.dto.AuditLogResponse;
 import com.procurement.authservice.entity.AuditLog;
 import com.procurement.authservice.infrastructure.cache.AuthCacheNames;
 import com.procurement.authservice.repository.AuditLogRepository;
+import com.procurement.authservice.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -26,7 +27,9 @@ public class AuditLogService {
     @Transactional
     public void logAction(String actionType, String entityAffected, String oldValue,
                           String newValue, Long userId) {
+        Long tenantId = TenantContext.getCurrentTenant();
         AuditLog auditLog = new AuditLog();
+        auditLog.setTenantId(tenantId != null ? tenantId : 1L);
         auditLog.setActionType(actionType);
         auditLog.setEntityAffected(entityAffected);
         auditLog.setOldValue(oldValue);
@@ -41,15 +44,25 @@ public class AuditLogService {
     @Cacheable(value = "auditLogs", key = "'all'", sync = true)
     @Transactional(readOnly = true)
     public List<AuditLogResponse> getAllAuditLogs() {
+        Long tenantId = TenantContext.getCurrentTenant();
+        if (tenantId != null) {
+            return auditLogRepository.findTop100ByTenantIdOrderByTimestampDesc(tenantId)
+                .stream().map(this::mapToResponse).collect(Collectors.toList());
+        }
         return auditLogRepository.findTop100ByOrderByTimestampDesc()
             .stream()
             .map(this::mapToResponse)
             .collect(Collectors.toList());
     }
 
-    @Cacheable(value = "auditLogs", key = AuthCacheNames.AUDIT_LOGS + ":user:#userId", sync = true)
+    @Cacheable(value = "auditLogs", key = "'user:' + #userId", sync = true)
     @Transactional(readOnly = true)
     public List<AuditLogResponse> getAuditLogsByUser(Long userId) {
+        Long tenantId = TenantContext.getCurrentTenant();
+        if (tenantId != null) {
+            return auditLogRepository.findByTenantIdAndUserIdOrderByTimestampDesc(tenantId, userId)
+                .stream().map(this::mapToResponse).collect(Collectors.toList());
+        }
         return auditLogRepository.findByUserIdOrderByTimestampDesc(userId)
             .stream()
             .map(this::mapToResponse)

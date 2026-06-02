@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,13 +21,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deliveryApi, poApi, threeWayMatchApi, disputeApi, getVendorNameMap, invoiceApi } from "@/lib/api";
+import { deliveryApi, poApi, threeWayMatchApi, disputeApi, getCompanyNameMap, invoiceApi, deliveryStatusQuery } from "@/lib/api";
 import type { PagedResponse } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
+import { formatQualityIssues, formatQualityRating } from "@/lib/delivery-quality";
 import { useToast } from "@/hooks/use-toast";
 import { DeliveryDialog } from "./delivery-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { RequireRole } from "@/components/require-role";
+import { useListDeepLink } from "@/hooks/use-list-deep-link";
 import { useAuthStore } from "@/lib/auth-store";
+import { ProcurementPipelineBanner } from "@/components/procurement-pipeline-banner";
+import { WorkflowNextStep } from "@/components/workflow-next-step";
 import {
   Search, Loader2, MapPin, Scale, MessageSquare, Filter,
   Truck, CheckCircle2, Clock, AlertTriangle, Download, Plus,
@@ -42,6 +47,7 @@ interface Delivery {
   poNumber?: string;
   vendor?: string;
   vendorName?: string;
+  companyName?: string;
   quantity?: number;
   status: string;
   trackingNumber?: string;
@@ -52,6 +58,9 @@ interface Delivery {
   origin?: string;
   destination?: string;
   eta?: string;
+  qualityRating?: string;
+  qualityIssueTypes?: string;
+  qualityRemarks?: string;
 }
 
 export default function DeliveriesPage() {
@@ -60,6 +69,7 @@ export default function DeliveriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
@@ -80,6 +90,7 @@ export default function DeliveriesPage() {
   const [disputeDelivery, setDisputeDelivery] = useState<Delivery | null>(null);
   const [disputeDescription, setDisputeDescription] = useState("");
   const [disputeLoading, setDisputeLoading] = useState(false);
+  const [detailDelivery, setDetailDelivery] = useState<Delivery | null>(null);
 
   const { toast } = useToast();
   const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -88,33 +99,37 @@ export default function DeliveriesPage() {
   const canValidateMatch = hasPermission("three-way-match:validate");
   const canRaiseDispute = hasPermission("invoices:dispute");
 
+  const [updatingDelivery, setUpdatingDelivery] = useState<string | null>(null);
+
   // Invoices for the selected delivery's PO (used in 3-way match dropdown)
   const [poInvoices, setPoInvoices] = useState<any[]>([]);
 
-  async function loadDeliveries(page = 0) {
+  const loadDeliveries = useCallback(async (page = 0) => {
     try {
       setLoading(true);
       let deliveryItems: Delivery[] = [];
       let pages = 0;
       let total = 0;
 
-      // Pre-load vendor names so we never show raw IDs
-      const vendorMap = await getVendorNameMap().catch(() => new Map<string, string>());
+      const vendorMap = await getCompanyNameMap().catch(() => new Map<string, string>());
 
       try {
-        const [data] = await Promise.all([
-          deliveryApi.getAll(page, PAGE_SIZE),
-        ]);
+        const data = await deliveryApi.getAll({
+          page,
+          size: PAGE_SIZE,
+          search: debouncedSearch,
+          ...deliveryStatusQuery(statusFilter),
+          sort: "id-desc",
+        });
 
-        const response = data;
-        const dataContent = response.content ?? [];
-        pages = response.totalPages ?? 0;
-        total = response.totalElements ?? 0;
+        const dataContent = data.content ?? [];
+        pages = data.totalPages ?? 0;
+        total = data.totalElements ?? 0;
         if (dataContent.length > 0) {
           deliveryItems = dataContent.map((d: any) => {
             const vendorId = String(d.vendorId || "");
-            const vendorName =
-              d.vendorName || d.vendor || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "N/A");
+            const companyName =
+              d.vendorName || d.vendor || displayVendorName(vendorId, { map: vendorMap, empty: "N/A" });
             const deliveryId = String(d.deliveryId || d.id);
             const poId = String(d.poId || d.purchaseOrderId || d.id);
             const poNumber = d.poNumber || `PO-${poId.padStart(6, "0")}`;
@@ -122,8 +137,8 @@ export default function DeliveriesPage() {
               id: deliveryId,
               poId,
               poNumber,
-              vendor: vendorName,
-              vendorName,
+              vendor: companyName,
+              companyName,
               quantity: d.quantityDelivered || d.quantity,
               status: d.deliveryStatus || d.status || "Delivered",
               trackingNumber: d.trackingNumber,
@@ -133,6 +148,9 @@ export default function DeliveriesPage() {
               origin: d.origin || "Supplier",
               destination: d.destination || "Main Warehouse",
               eta: d.expectedDate || d.eta,
+              qualityRating: d.qualityRating,
+              qualityIssueTypes: d.qualityIssueTypes,
+              qualityRemarks: d.qualityRemarks,
             };
           });
         }
@@ -140,8 +158,8 @@ export default function DeliveriesPage() {
         // Delivery endpoint not available — derive from POs
       }
 
-      if (deliveryItems.length === 0) {
-        const poResponse = await poApi.getAll(page, PAGE_SIZE);
+      if (deliveryItems.length === 0 && !debouncedSearch && statusFilter === "ALL") {
+        const poResponse = await poApi.getAll({ page, size: PAGE_SIZE });
         const pos = poResponse.content ?? [];
         pages = poResponse.totalPages ?? 0;
         total = poResponse.totalElements ?? 0;
@@ -149,16 +167,16 @@ export default function DeliveriesPage() {
           .filter((po: any) => po.deliveryStatus || ["SHIPPED", "DELIVERED", "IN_TRANSIT"].includes(po.status))
           .map((po: any) => {
             const vendorId = String(po.vendorId || "");
-            const vendorName =
-              po.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "N/A");
+            const companyName =
+              po.vendorName || displayVendorName(vendorId, { map: vendorMap, empty: "N/A" });
             const poId = String(po.id || po.poId);
             const poNumber = po.poNumber || `PO-${poId.padStart(6, "0")}`;
             return {
               id: poId,
               poId,
               poNumber,
-              vendor: vendorName,
-              vendorName,
+              vendor: companyName,
+              companyName,
               status: po.deliveryStatus || po.status,
               trackingNumber: po.trackingNumber,
               deliveryDate: po.deliveryDate,
@@ -178,27 +196,16 @@ export default function DeliveriesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [debouncedSearch, statusFilter]);
 
-  // Filter deliveries based on search query and status filter
   useEffect(() => {
-    let filtered = deliveries;
-    if (statusFilter !== "ALL") {
-      filtered = filtered.filter((d) => d.status?.toUpperCase() === statusFilter);
-    }
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (d) =>
-          d.poNumber?.toLowerCase().includes(query) ||
-          d.vendorName?.toLowerCase().includes(query) ||
-          d.vendor?.toLowerCase().includes(query) ||
-          d.status?.toLowerCase().includes(query) ||
-          d.trackingNumber?.toLowerCase().includes(query)
-      );
-    }
-    setFilteredDeliveries(filtered);
-  }, [searchQuery, statusFilter, deliveries]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [debouncedSearch, statusFilter]);
 
   // Export deliveries to CSV
   function handleExport() {
@@ -227,9 +234,17 @@ export default function DeliveriesPage() {
   }
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"])) return;
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"])) return;
     loadDeliveries(currentPage);
-  }, [currentPage]);
+  }, [currentPage, loadDeliveries]);
+
+  useListDeepLink(deliveries, loading, (delivery) => setDetailDelivery(delivery), {
+    paramNames: ["id", "poId"],
+    match: (item, value, paramName) =>
+      paramName === "poId"
+        ? String((item as Delivery).poId ?? "") === value
+        : String(item.id) === value,
+  });
 
   async function handleThreeWayMatch(
     poId: string,
@@ -268,6 +283,23 @@ export default function DeliveriesPage() {
     }
   }
 
+  async function handleMarkDelivered(delivery: Delivery) {
+    setUpdatingDelivery(delivery.id);
+    try {
+      await deliveryApi.updateStatus(delivery.id, "Delivered");
+      toast({ title: "Delivery Confirmed", description: `Delivery DEL-${delivery.id.padStart(6, "0")} marked as delivered. PO status updated.` });
+      loadDeliveries(currentPage);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to update delivery status",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingDelivery(null);
+    }
+  }
+
   async function handleRaiseDispute(poId: string, deliveryId: string, type: string, description: string) {
     try {
       setDisputeLoading(true);
@@ -293,9 +325,10 @@ export default function DeliveriesPage() {
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
+          <ProcurementPipelineBanner activeStep="delivery" />
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Deliveries</h1>
@@ -412,7 +445,7 @@ export default function DeliveriesPage() {
                         const isOverdue = etaDate && etaDate < new Date() && delivery.status?.toUpperCase() !== "DELIVERED";
 
                         return (
-                        <TableRow key={delivery.id} className={`hover:bg-gray-50 transition-colors ${isOverdue ? "bg-red-50/30" : ""}`}>
+                        <TableRow key={delivery.id} className={`hover:bg-gray-50 transition-colors cursor-pointer ${isOverdue ? "bg-red-50/30" : ""}`} onClick={() => setDetailDelivery(delivery)}>
                           <TableCell className="font-medium text-xs font-mono">
                             DEL-{delivery.id.padStart(6, "0")}
                           </TableCell>
@@ -446,8 +479,23 @@ export default function DeliveriesPage() {
                               <span className="text-gray-400">—</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex gap-2">
+                              {canUpdateDelivery && ["IN_TRANSIT", "SHIPPED", "PENDING", "SCHEDULED"].includes(delivery.status?.toUpperCase()) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                  onClick={() => handleMarkDelivered(delivery)}
+                                  disabled={updatingDelivery === delivery.id}
+                                  title="Mark as Delivered"
+                                >
+                                  {updatingDelivery === delivery.id
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                  {updatingDelivery !== delivery.id && "Deliver"}
+                                </Button>
+                              )}
                               {canValidateMatch && (
                                 <Button
                                   variant="outline"
@@ -457,13 +505,26 @@ export default function DeliveriesPage() {
                                     setMatchDelivery(delivery);
                                     setMatchInvoiceId("");
                                     setMatchAmount("");
-                                    setMatchQuantity("");
+                                    setMatchQuantity(
+                                      delivery.quantity != null ? String(delivery.quantity) : ""
+                                    );
                                     setMatchDialogOpen(true);
-                                    // Pre-load invoices for this PO
                                     try {
-                                      const invs = await invoiceApi.getByPO(delivery.poId).catch(() => []);
+                                      const [invs, po] = await Promise.all([
+                                        invoiceApi.getByPO(delivery.poId).catch(() => []),
+                                        poApi.getById(delivery.poId).catch(() => null),
+                                      ]);
                                       setPoInvoices(invs as any[]);
-                                    } catch { setPoInvoices([]); }
+                                      if (po?.totalAmount != null) {
+                                        setMatchAmount(String(po.totalAmount));
+                                      }
+                                      const qtyFromPo = po?.expectedQuantity ?? po?.quantity;
+                                      if (qtyFromPo != null && !delivery.quantity) {
+                                        setMatchQuantity(String(qtyFromPo));
+                                      }
+                                    } catch {
+                                      setPoInvoices([]);
+                                    }
                                   }}
                                   title="3-Way Match"
                                 >
@@ -507,38 +568,93 @@ export default function DeliveriesPage() {
 
         <DeliveryDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={loadDeliveries} />
 
+        {/* Delivery Detail Dialog */}
+        <Dialog open={!!detailDelivery} onOpenChange={(o) => !o && setDetailDelivery(null)}>
+          <DialogContent className="sm:max-w-[480px] rounded">
+            <DialogHeader>
+              <DialogTitle className="text-sm">DEL-{detailDelivery?.id.padStart(6, "0")}</DialogTitle>
+              <DialogDescription className="text-xs">Delivery details</DialogDescription>
+            </DialogHeader>
+            {detailDelivery && (
+              <div className="space-y-3 py-1 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><p className="text-gray-500">Purchase Order</p><p className="font-medium mt-0.5">{detailDelivery.poNumber}</p></div>
+                  <div><p className="text-gray-500">Vendor</p><p className="font-medium mt-0.5">{detailDelivery.vendorName || detailDelivery.vendor || "—"}</p></div>
+                  <div><p className="text-gray-500">Status</p>
+                    {(() => {
+                      const s = detailDelivery.status?.toUpperCase();
+                      const cls = s === "DELIVERED" ? "bg-emerald-100 text-emerald-700" : s === "DELAYED" ? "bg-red-100 text-red-700" : ["IN_TRANSIT","SHIPPED"].includes(s || "") ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600";
+                      return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${cls}`}>{detailDelivery.status?.replace(/_/g, " ")}</span>;
+                    })()}
+                  </div>
+                  <div><p className="text-gray-500">Carrier</p><p className="font-medium mt-0.5">{detailDelivery.carrier || "—"}</p></div>
+                  <div><p className="text-gray-500">Tracking #</p><p className="font-mono font-medium mt-0.5">{detailDelivery.trackingNumber || "—"}</p></div>
+                  <div><p className="text-gray-500">Quantity</p><p className="font-medium mt-0.5">{detailDelivery.quantity ?? "—"}</p></div>
+                  <div><p className="text-gray-500">Origin</p><p className="font-medium mt-0.5">{detailDelivery.origin || "Supplier"}</p></div>
+                  <div><p className="text-gray-500">Destination</p><p className="font-medium mt-0.5">{detailDelivery.destination || "Warehouse"}</p></div>
+                  <div><p className="text-gray-500">Expected Date</p><p className="font-medium mt-0.5">{detailDelivery.eta ? new Date(detailDelivery.eta).toLocaleDateString() : "—"}</p></div>
+                  <div><p className="text-gray-500">Delivery Date</p><p className="font-medium mt-0.5">{detailDelivery.deliveryDate ? new Date(detailDelivery.deliveryDate).toLocaleDateString() : "—"}</p></div>
+                  <div className="col-span-2"><p className="text-gray-500">Quality inspection</p><p className="font-medium mt-0.5">{formatQualityRating(detailDelivery.qualityRating)}</p></div>
+                  {detailDelivery.qualityIssueTypes && (
+                    <div className="col-span-2"><p className="text-gray-500">Issues</p><p className="font-medium mt-0.5">{formatQualityIssues(detailDelivery.qualityIssueTypes)}</p></div>
+                  )}
+                  {detailDelivery.qualityRemarks && (
+                    <div className="col-span-2"><p className="text-gray-500">Remarks (audit)</p><p className="text-gray-600 mt-0.5">{detailDelivery.qualityRemarks}</p></div>
+                  )}
+                </div>
+                {detailDelivery.status?.toUpperCase() === "DELIVERED" && (
+                  <WorkflowNextStep
+                    message="Goods received — review vendor invoice and run 3-way match."
+                    href={`/invoices?poId=${detailDelivery.poId}`}
+                    linkLabel="Invoices"
+                  />
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setDetailDelivery(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* 3-Way Match Dialog */}
         <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
           <DialogContent className="sm:max-w-[440px] rounded">
             <DialogHeader>
               <DialogTitle>3-Way Match Validation</DialogTitle>
               <DialogDescription>
-                Enter the invoice details to validate against {matchDelivery?.poNumber || matchDelivery?.poId}.
+                Select the invoice to validate against {matchDelivery?.poNumber || "this delivery"}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1.5">
-                <Label className="text-xs">Invoice</Label>
+                <Label className="text-xs">Invoice *</Label>
                 {poInvoices.length > 0 ? (
-                  <Select value={matchInvoiceId} onValueChange={setMatchInvoiceId}>
+                  <Select
+                    value={matchInvoiceId}
+                    onValueChange={(id) => {
+                      setMatchInvoiceId(id);
+                      const inv = poInvoices.find((i: any) => String(i.invoiceId || i.id) === id);
+                      if (inv?.invoiceAmount != null) {
+                        setMatchAmount(String(inv.invoiceAmount));
+                      }
+                    }}
+                  >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select an invoice..." />
                     </SelectTrigger>
                     <SelectContent>
                       {poInvoices.map((inv: any) => {
                         const id = String(inv.invoiceId || inv.id);
-                        const label = `INV-${id.padStart(6, "0")} — $${Number(inv.invoiceAmount || 0).toLocaleString()} (${inv.status})`;
+                        const label = `${inv.invoiceNumber || `INV-${id.padStart(6, "0")}`} — $${Number(inv.invoiceAmount || 0).toLocaleString()} (${inv.status || "PENDING"})`;
                         return <SelectItem key={id} value={id}>{label}</SelectItem>;
                       })}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input
-                    value={matchInvoiceId}
-                    onChange={(e) => setMatchInvoiceId(e.target.value)}
-                    placeholder="Enter invoice ID"
-                    className="h-8 text-xs"
-                  />
+                  <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-3 py-2">
+                    No invoices found for {matchDelivery?.poNumber || "this PO"}. Ask the vendor to submit an invoice first.
+                  </p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -595,7 +711,7 @@ export default function DeliveriesPage() {
             <DialogHeader>
               <DialogTitle>Raise Dispute</DialogTitle>
               <DialogDescription>
-                Describe the issue with delivery for {disputeDelivery?.poNumber || disputeDelivery?.poId}.
+                Describe the issue with delivery for {disputeDelivery?.poNumber || "this purchase order"}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2">

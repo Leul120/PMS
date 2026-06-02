@@ -8,16 +8,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 
-/**
- * Rate limiting key resolvers for different strategies.
- */
 @Configuration
 public class RateLimitConfig {
 
-    /**
-     * Key resolver based on client IP address.
-     * Used for unauthenticated endpoints.
-     */
     @Bean
     @Primary
     public KeyResolver ipKeyResolver() {
@@ -31,28 +24,17 @@ public class RateLimitConfig {
         };
     }
 
-    /**
-     * Key resolver based on authenticated user ID.
-     * Used for authenticated endpoints.
-     */
     @Bean
     public KeyResolver userKeyResolver() {
         return exchange -> {
-            // Try to get user ID from JWT token or session
-            String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
+            Object userId = exchange.getAttribute("userId");
             if (userId != null) {
                 return Mono.just("user:" + userId);
             }
-
-            // Fallback to IP if no user context
             return ipKeyResolver().resolve(exchange);
         };
     }
 
-    /**
-     * Key resolver based on API key.
-     * Used for partner/external API access.
-     */
     @Bean
     public KeyResolver apiKeyResolver() {
         return exchange -> {
@@ -64,22 +46,40 @@ public class RateLimitConfig {
         };
     }
 
-    /**
-     * Key resolver combining user and endpoint.
-     * For granular per-user per-endpoint limiting.
-     */
     @Bean
     public KeyResolver userEndpointKeyResolver() {
         return exchange -> {
-            String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
+            Object userId = exchange.getAttribute("userId");
             String path = exchange.getRequest().getPath().value();
             String method = exchange.getRequest().getMethod().name();
-
             String key = userId != null
                     ? "user:" + userId + ":" + method + ":" + path
-                    : "ip:" + ipKeyResolver().resolve(exchange).block() + ":" + method + ":" + path;
-
+                    : "ip:" + exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()
+                        + ":" + method + ":" + path;
             return Mono.just(key);
+        };
+    }
+
+    @Bean
+    public KeyResolver tenantKeyResolver() {
+        return exchange -> {
+            Object tenantId = exchange.getAttribute("tenantId");
+            if (tenantId != null) {
+                return Mono.just("tenant:" + tenantId);
+            }
+            return ipKeyResolver().resolve(exchange);
+        };
+    }
+
+    @Bean
+    public KeyResolver tenantUserKeyResolver() {
+        return exchange -> {
+            Object tenantId = exchange.getAttribute("tenantId");
+            Object userId = exchange.getAttribute("userId");
+            if (tenantId != null && userId != null) {
+                return Mono.just("tenant:" + tenantId + ":user:" + userId);
+            }
+            return ipKeyResolver().resolve(exchange);
         };
     }
 }

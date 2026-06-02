@@ -15,13 +15,25 @@ interface RFQDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** Pre-select an approved requisition when opening from Requisitions. */
+  initialRequisitionId?: string;
+  initialData?: {
+    id: string | number;
+    title?: string;
+    description?: string;
+    deadline?: string;
+    estimatedValue?: number;
+    categoryId?: string | number;
+    expectedQuantity?: number;
+  } | null;
 }
 
-export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
+export function RFQDialog({ open, onOpenChange, onSuccess, initialRequisitionId, initialData }: RFQDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requisitions, setRequisitions] = useState<any[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [selectedReqId, setSelectedReqId] = useState("");
   const [formData, setFormData] = useState({
     title: "",
@@ -32,29 +44,74 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     expectedQuantity: "",
   });
 
+  const isEditing = !!initialData?.id;
+
   useEffect(() => {
     if (!open) return;
+    setCategoriesLoading(true);
     vendorApi.getCategories().then((cats: any[]) => {
       setCategories(cats.map((c: any) => ({ id: c.categoryId, name: c.categoryName })));
-    }).catch(() => {});
-    const stored = typeof window !== "undefined" ? localStorage.getItem("auth-storage") : null;
+    }).catch(() => {}).finally(() => setCategoriesLoading(false));
+
+    if (initialData) {
+      setFormData({
+        title: initialData.title || "",
+        description: initialData.description || "",
+        deadline: initialData.deadline
+          ? new Date(initialData.deadline).toISOString().slice(0, 16)
+          : "",
+        estimatedValue: String(initialData.estimatedValue || ""),
+        categoryId: String(initialData.categoryId || ""),
+        expectedQuantity: String(initialData.expectedQuantity || ""),
+      });
+      setSelectedReqId("");
+      return;
+    }
+
+    setFormData({ title: "", description: "", deadline: "", estimatedValue: "", categoryId: "", expectedQuantity: "" });
+    setSelectedReqId("");
+    const stored = typeof window !== "undefined" ? sessionStorage.getItem("auth-storage") : null;
     const role: string = stored ? (JSON.parse(stored)?.state?.user?.role ?? "") : "";
-    if (role === "VENDOR") return;
-    requisitionApi.getAll(0, 100).then((res) => {
+    if (role === "VENDOR" || role === "VENDOR_ADMIN" || role === "VENDOR_SALES" || role === "VENDOR_FINANCE") return;
+    requisitionApi.getAll({ page: 0, size: 100 }).then((res) => {
       setRequisitions((res.content ?? []).filter((r: any) => r.status === "APPROVED"));
     }).catch(() => {});
-  }, [open]);
+  }, [open, initialData]);
 
-  function handleRequisitionSelect(reqId: string) {
+  useEffect(() => {
+    if (!open || initialData || !initialRequisitionId || requisitions.length === 0) return;
+    const reqId = String(initialRequisitionId);
+    if (!requisitions.some((r: any) => String(r.requisitionId) === reqId)) return;
+    handleRequisitionSelect(reqId, requisitions);
+  }, [open, initialRequisitionId, initialData, requisitions, categories]);
+
+  function handleRequisitionSelect(reqId: string, reqList = requisitions) {
+    if (reqId === "__none__") { setSelectedReqId(""); return; }
     setSelectedReqId(reqId);
     if (!reqId) return;
-    const req = requisitions.find((r: any) => String(r.requisitionId) === reqId);
+    const req = reqList.find((r: any) => String(r.requisitionId) === reqId);
     if (!req) return;
+
+    // Match item category string → categoryId from loaded categories
+    const itemCategory: string | undefined = req.items?.[0]?.category;
+    const matchedCat = itemCategory
+      ? categories.find((c) => c.name.toLowerCase() === itemCategory.toLowerCase())
+      : null;
+
+    // Sum quantities across all items
+    const totalQty: number = (req.items ?? []).reduce(
+      (sum: number, item: any) => sum + (item.quantity || 0), 0
+    );
+
     setFormData((prev) => ({
       ...prev,
-      title: req.justification || `Requisition ${req.requisitionNumber}`,
+      title: req.requisitionNumber
+        ? `${req.requisitionNumber} — ${req.justification || req.department}`
+        : (req.justification || `Requisition ${req.requisitionNumber}`),
       description: req.justification || "",
       estimatedValue: String(req.estimatedBudget || ""),
+      categoryId: matchedCat ? String(matchedCat.id) : prev.categoryId,
+      expectedQuantity: totalQty > 0 ? String(totalQty) : prev.expectedQuantity,
     }));
   }
 
@@ -62,14 +119,21 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await rfqApi.create({
+      const payload = {
         ...formData,
         estimatedValue: parseFloat(formData.estimatedValue) || 0,
         categoryId: parseInt(formData.categoryId) || undefined,
         expectedQuantity: parseInt(formData.expectedQuantity) || undefined,
         deadline: new Date(formData.deadline).toISOString(),
-      });
-      toast({ title: "RFQ created", description: "Request for quotation sent to vendors." });
+        requisitionId: selectedReqId ? parseInt(selectedReqId) : undefined,
+      };
+      if (isEditing) {
+        await rfqApi.update(initialData!.id, payload);
+        toast({ title: "RFQ updated", description: "Request for quotation has been updated." });
+      } else {
+        await rfqApi.create(payload);
+        toast({ title: "RFQ created", description: "Request for quotation sent to vendors." });
+      }
       onSuccess();
       onOpenChange(false);
       setFormData({ title: "", description: "", deadline: "", estimatedValue: "", categoryId: "", expectedQuantity: "" });
@@ -77,7 +141,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create RFQ",
+        description: error instanceof Error ? error.message : `Failed to ${isEditing ? "update" : "create"} RFQ`,
         variant: "destructive",
       });
     } finally {
@@ -89,14 +153,14 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[540px] rounded">
         <DialogHeader>
-          <DialogTitle className="text-sm font-semibold">Create RFQ</DialogTitle>
+          <DialogTitle className="text-sm font-semibold">{isEditing ? "Edit RFQ" : "Create RFQ"}</DialogTitle>
           <DialogDescription className="text-xs">
-            Create a request for quotation and invite vendors to submit bids.
+            {isEditing ? "Update the request for quotation details." : "Create a request for quotation and invite vendors to submit bids."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {requisitions.length > 0 && (
+          {!isEditing && requisitions.length > 0 && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-gray-500">Pre-fill from Requisition (optional)</Label>
               <Select value={selectedReqId} onValueChange={handleRequisitionSelect}>
@@ -104,7 +168,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
                   <SelectValue placeholder="Select an approved requisition…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— None —</SelectItem>
+                  <SelectItem value="__none__">— None —</SelectItem>
                   {requisitions.map((req: any) => (
                     <SelectItem key={req.requisitionId} value={String(req.requisitionId)}>
                       {req.requisitionNumber} — {req.department} (${req.estimatedBudget?.toLocaleString()})
@@ -174,13 +238,14 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
               <Label htmlFor="categoryId" className="text-xs font-medium">Category *</Label>
               <Select value={formData.categoryId} onValueChange={(v) => setFormData({ ...formData, categoryId: v })}>
                 <SelectTrigger id="categoryId" className="h-8 text-xs">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder={categoriesLoading ? "Loading..." : "Select category"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(categories.length > 0 ? categories : [
-                    { id: 1, name: "IT" }, { id: 2, name: "Construction" },
-                    { id: 3, name: "Stationery" }, { id: 4, name: "Electronics" }, { id: 5, name: "Furniture" },
-                  ]).map((cat) => (
+                  {categoriesLoading ? (
+                    <div className="py-2 text-center text-[10px] text-gray-400">Loading categories…</div>
+                  ) : categories.length === 0 ? (
+                    <div className="py-2 text-center text-[10px] text-gray-400">No categories found</div>
+                  ) : categories.map((cat) => (
                     <SelectItem key={cat.id} value={String(cat.id)}>{cat.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -205,7 +270,7 @@ export function RFQDialog({ open, onOpenChange, onSuccess }: RFQDialogProps) {
             </Button>
             <Button type="submit" size="sm" className="h-8 text-xs rounded" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Create RFQ
+              {isEditing ? "Save Changes" : "Create RFQ"}
             </Button>
           </DialogFooter>
         </form>

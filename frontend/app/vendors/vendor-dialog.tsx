@@ -13,12 +13,23 @@ import {
 } from "@/components/ui/select";
 import { vendorApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface VendorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  initialData?: {
+    id: string | number;
+    companyName?: string;
+    email?: string;
+    phone?: string;
+    phoneNumber?: string;
+    address?: string;
+    taxId?: string;
+    category?: string;
+    categoryId?: string | number;
+  } | null;
 }
 
 const EMPTY_FORM = {
@@ -31,29 +42,46 @@ const EMPTY_FORM = {
   categoryId: "",
 };
 
-export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProps) {
+export function VendorDialog({ open, onOpenChange, onSuccess, initialData }: VendorDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<{ categoryId: number; categoryName: string }[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const isEditing = !!initialData?.id;
 
   useEffect(() => {
     if (open) {
       loadCategories();
-      setFormData(EMPTY_FORM);
       setErrors({});
+      if (initialData) {
+        setFormData({
+          companyName: initialData.companyName || "",
+          contactPerson: "",
+          email: initialData.email || "",
+          phoneNumber: initialData.phone || initialData.phoneNumber || "",
+          address: initialData.address || "",
+          taxId: initialData.taxId || "",
+          categoryId: String(initialData.categoryId || ""),
+        });
+      } else {
+        setFormData(EMPTY_FORM);
+      }
     }
   }, [open]);
 
   async function loadCategories() {
     try {
       setLoadingCategories(true);
+      setCategoriesError(false);
       const data = await vendorApi.getCategories();
       setCategories(data as any[]);
     } catch {
-      // fall back to empty list
+      setCategories([]);
+      setCategoriesError(true);
     } finally {
       setLoadingCategories(false);
     }
@@ -64,7 +92,7 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     if (!formData.companyName.trim()) newErrors.companyName = "Required";
     if (!formData.email.trim()) newErrors.email = "Required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email";
-    if (!formData.contactPerson.trim()) newErrors.contactPerson = "Required";
+    if (!isEditing && !formData.contactPerson.trim()) newErrors.contactPerson = "Required";
     if (!formData.categoryId) newErrors.categoryId = "Required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -75,22 +103,34 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     if (!validateForm()) return;
     setIsSubmitting(true);
     try {
-      await vendorApi.register({
-        companyName: formData.companyName,
-        contactPerson: formData.contactPerson,
-        email: formData.email,
-        categoryId: parseInt(formData.categoryId),
-        phoneNumber: formData.phoneNumber || undefined,
-        address: formData.address || undefined,
-        taxId: formData.taxId || undefined,
-      });
-      toast({ title: "Vendor created", description: `${formData.companyName} has been added.` });
+      if (isEditing) {
+        await vendorApi.update(initialData!.id, {
+          companyName: formData.companyName,
+          email: formData.email,
+          categoryId: formData.categoryId ? parseInt(formData.categoryId) : undefined,
+          phoneNumber: formData.phoneNumber || undefined,
+          address: formData.address || undefined,
+          taxId: formData.taxId || undefined,
+        });
+        toast({ title: "Vendor updated", description: `${formData.companyName} has been updated.` });
+      } else {
+        await vendorApi.register({
+          companyName: formData.companyName,
+          contactPerson: formData.contactPerson,
+          email: formData.email,
+          categoryId: parseInt(formData.categoryId),
+          phoneNumber: formData.phoneNumber || undefined,
+          address: formData.address || undefined,
+          taxId: formData.taxId || undefined,
+        });
+        toast({ title: "Vendor created", description: `${formData.companyName} has been added.` });
+      }
       onSuccess();
       onOpenChange(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create vendor",
+        description: error instanceof Error ? error.message : `Failed to ${isEditing ? "update" : "create"} vendor`,
         variant: "destructive",
       });
     } finally {
@@ -108,8 +148,8 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px] rounded">
         <DialogHeader>
-          <DialogTitle className="text-sm font-semibold">Add New Vendor</DialogTitle>
-          <DialogDescription className="text-xs">Register a new vendor to your supplier network.</DialogDescription>
+          <DialogTitle className="text-sm font-semibold">{isEditing ? "Edit Vendor" : "Add New Vendor"}</DialogTitle>
+          <DialogDescription className="text-xs">{isEditing ? "Update vendor details." : "Register a new vendor to your supplier network."}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -125,6 +165,7 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             {errors.companyName && <p className="text-[10px] text-red-500">{errors.companyName}</p>}
           </div>
 
+          {!isEditing && (
           <div className="space-y-1.5">
             <Label htmlFor="contactPerson" className="text-xs font-medium">Contact Person *</Label>
             <Input
@@ -136,6 +177,7 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             />
             {errors.contactPerson && <p className="text-[10px] text-red-500">{errors.contactPerson}</p>}
           </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -186,13 +228,18 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="categoryId" className="text-xs font-medium">Category *</Label>
-              {categories.length > 0 ? (
+              {loadingCategories ? (
+                <div className="flex items-center gap-2 h-8 text-xs text-gray-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading categories…
+                </div>
+              ) : categories.length > 0 ? (
                 <Select
                   value={formData.categoryId}
                   onValueChange={(v) => { setFormData({ ...formData, categoryId: v }); if (errors.categoryId) setErrors({ ...errors, categoryId: "" }); }}
                 >
                   <SelectTrigger id="categoryId" className={`h-8 text-xs ${errors.categoryId ? "border-red-400" : ""}`}>
-                    <SelectValue placeholder={loadingCategories ? "Loading..." : "Select category"} />
+                    <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((cat) => (
@@ -203,15 +250,15 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
                   </SelectContent>
                 </Select>
               ) : (
-                <Input
-                  id="categoryId"
-                  type="number"
-                  value={formData.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  placeholder={loadingCategories ? "Loading..." : "Category ID"}
-                  disabled={loadingCategories}
-                  className="h-8 text-xs border-gray-200"
-                />
+                <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-800">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    <span>{categoriesError ? "Could not load categories." : "No categories available."}</span>
+                    <button type="button" onClick={loadCategories} className="ml-auto font-medium underline hover:no-underline">
+                      Retry
+                    </button>
+                  </div>
+                </div>
               )}
               {errors.categoryId && <p className="text-[10px] text-red-500">{errors.categoryId}</p>}
             </div>
@@ -221,9 +268,9 @@ export function VendorDialog({ open, onOpenChange, onSuccess }: VendorDialogProp
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting}>
+            <Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting || loadingCategories || categories.length === 0}>
               {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Add Vendor
+              {isEditing ? "Save Changes" : "Add Vendor"}
             </Button>
           </DialogFooter>
         </form>

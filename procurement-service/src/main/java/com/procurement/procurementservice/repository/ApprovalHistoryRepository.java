@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface ApprovalHistoryRepository extends JpaRepository<ApprovalHistory, Long> {
     List<ApprovalHistory> findByRequisitionRequisitionId(Long requisitionId);
+
+    boolean existsByRequisitionRequisitionIdAndApproverIdAndApprovalLevel(
+            Long requisitionId, Long approverId, Integer approvalLevel);
 }

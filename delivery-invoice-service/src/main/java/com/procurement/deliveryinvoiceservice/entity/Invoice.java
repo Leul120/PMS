@@ -2,21 +2,30 @@ package com.procurement.deliveryinvoiceservice.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.Filter;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "invoice", indexes = {
+    @Index(name = "idx_invoice_tenant_id", columnList = "tenantId"),
+    @Index(name = "idx_invoice_tenant_po", columnList = "tenantId, poId"),
     @Index(name = "idx_invoice_po_id", columnList = "poId"),
     @Index(name = "idx_invoice_vendor_id", columnList = "vendorId"),
     @Index(name = "idx_invoice_status", columnList = "status"),
     @Index(name = "idx_invoice_discrepancy", columnList = "discrepancyFlag")
 })
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 @Data
 public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long invoiceId;
+
+    @Column(nullable = false)
+    private Long tenantId;
+
     private Long poId;
     private Long vendorId;
     private BigDecimal invoiceAmount;

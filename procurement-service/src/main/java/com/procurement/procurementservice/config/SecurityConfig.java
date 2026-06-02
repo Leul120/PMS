@@ -36,32 +36,34 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // ── Requisitions ──────────────────────────────────────────
-                // GET requisitions - ADMIN, OFFICER, MANAGER, AUDITOR
+                // GET requisitions - internal roles + director/super-admin
                 .requestMatchers(HttpMethod.GET, "/api/procurement/requisitions", "/api/procurement/requisitions/**")
-                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
-                // POST approve requisition - ADMIN, MANAGER
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "REQUESTER", "SUPER_ADMIN")
+                // POST approve requisition - ADMIN, MANAGER, DIRECTOR
                 .requestMatchers(HttpMethod.POST, "/api/procurement/requisitions/*/approve")
-                    .hasAnyRole("ADMIN", "MANAGER")
-                // POST create requisition - ADMIN, OFFICER, MANAGER
+                    .hasAnyRole("ADMIN", "MANAGER", "DIRECTOR", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/procurement/requisitions/*/submit")
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "REQUESTER", "SUPER_ADMIN")
+                // POST create requisition - ADMIN, OFFICER, MANAGER, REQUESTER
                 .requestMatchers(HttpMethod.POST, "/api/procurement/requisitions")
-                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER")
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "REQUESTER", "SUPER_ADMIN")
 
                 // ── Purchase Orders ───────────────────────────────────────
-                // GET purchase orders - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
+                // GET purchase orders - all roles including vendor (vendors see their own POs)
                 .requestMatchers(HttpMethod.GET, "/api/purchase-orders", "/api/purchase-orders/**")
-                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                // POST approve/reject purchase order - ADMIN, MANAGER, DIRECTOR
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                // POST approve/reject purchase order - ADMIN, MANAGER, DIRECTOR, SUPER_ADMIN
                 .requestMatchers(HttpMethod.POST, "/api/purchase-orders/*/approve", "/api/purchase-orders/*/reject")
-                    .hasAnyRole("ADMIN", "MANAGER", "DIRECTOR")
-                // POST create purchase order - ADMIN, OFFICER
+                    .hasAnyRole("ADMIN", "MANAGER", "DIRECTOR", "SUPER_ADMIN")
+                // POST create purchase order - ADMIN, OFFICER, SUPER_ADMIN
                 .requestMatchers(HttpMethod.POST, "/api/purchase-orders")
-                    .hasAnyRole("ADMIN", "OFFICER")
-                // PUT status change - ADMIN, OFFICER, MANAGER
+                    .hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // PUT status change - ADMIN, OFFICER, MANAGER, SUPER_ADMIN
                 .requestMatchers(HttpMethod.PUT, "/api/purchase-orders/*/status")
-                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER")
-                // PUT update purchase order - ADMIN, OFFICER
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "SUPER_ADMIN")
+                // PUT update purchase order - ADMIN, OFFICER, SUPER_ADMIN
                 .requestMatchers(HttpMethod.PUT, "/api/purchase-orders/*")
-                    .hasAnyRole("ADMIN", "OFFICER")
+                    .hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
 
                 .anyRequest().authenticated()
             )
@@ -74,8 +76,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

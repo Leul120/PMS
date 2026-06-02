@@ -38,6 +38,15 @@ public class WebClientConfig {
                 .build();
     }
 
+    @Bean
+    public WebClient vendorWebClient(WebClient.Builder builder) {
+        return builder
+                .baseUrl(serviceProperties.getVendor().getUrl())
+                .clientConnector(new ReactorClientHttpConnector(
+                        createHttpClient("vendor-service")))
+                .build();
+    }
+
     private HttpClient createHttpClient(String serviceName) {
         return HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)

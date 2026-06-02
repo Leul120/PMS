@@ -44,32 +44,47 @@ public class SecurityConfig {
                 // Swagger / OpenAPI
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                // Super-admin exclusive endpoints (cross-tenant)
+                .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
+
                 // Current-user profile (any authenticated user)
                 .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
 
-                // User list — ADMIN, OFFICER, MANAGER, AUDITOR, DIRECTOR
-                .requestMatchers(HttpMethod.GET, "/api/auth/users").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR")
+                // User list (VENDOR_ADMIN can see their own tenant's users)
+                .requestMatchers(HttpMethod.GET, "/api/auth/users")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "VENDOR_ADMIN")
 
-                // User profile by ID — any authenticated role can view/update own profile
-                .requestMatchers(HttpMethod.GET, "/api/auth/users/{userId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.PUT, "/api/auth/users/{userId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // Vendor team invitation
+                .requestMatchers(HttpMethod.POST, "/api/auth/invite")
+                    .hasRole("VENDOR_ADMIN")
 
-                // Unlock user account — ADMIN only
-                .requestMatchers(HttpMethod.POST, "/api/auth/users/*/unlock").hasRole("ADMIN")
+                // User profile by ID
+                .requestMatchers(HttpMethod.GET, "/api/auth/users/{userId}")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.PUT, "/api/auth/users/{userId}")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
-                // Audit logs — ADMIN, AUDITOR
-                .requestMatchers(HttpMethod.GET, "/api/auth/audit-logs").hasAnyRole("ADMIN", "AUDITOR")
+                // Unlock / lock user account
+                .requestMatchers(HttpMethod.POST, "/api/auth/users/*/unlock")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN")
 
-                // Admin user management under /api/auth/admin/users/**
-                .requestMatchers("/api/auth/admin/users/**").hasRole("ADMIN")
+                // Audit logs
+                .requestMatchers(HttpMethod.GET, "/api/auth/audit-logs")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN", "AUDITOR")
 
-                // Admin user management under /api/admin/users/** (UserManagementController)
-                .requestMatchers("/api/admin/users/**").hasRole("ADMIN")
+                // Admin user management
+                .requestMatchers("/api/auth/admin/users/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/api/admin/users/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
 
-                // Settings — read is authenticated, write is ADMIN
+                // Tenant management
+                .requestMatchers("/api/tenants/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+
+                // Settings — read is authenticated, write is ADMIN/SUPER_ADMIN
                 .requestMatchers(HttpMethod.GET, "/api/auth/settings/**").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/auth/settings").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/auth/settings/security").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/auth/settings")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/auth/settings/security")
+                    .hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/auth/settings/notifications").authenticated()
 
                 // Everything else requires authentication
@@ -83,9 +98,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        String frontendUrl = System.getenv().getOrDefault("FRONTEND_URL", "http://localhost:3000");
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:3000", "http://localhost:*", "http://127.0.0.1:3000",
+            "http://frontend:3000", frontendUrl
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-User-Id"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
 

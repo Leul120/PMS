@@ -3,6 +3,7 @@ package com.procurement.rfqbiddingservice.infrastructure.cache;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.procurement.rfqbiddingservice.tenant.TenantContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -26,61 +27,57 @@ import java.time.Duration;
 @EnableCaching
 public class CacheConfig {
 
-    @Value("${spring.data.redis.host:localhost}")
-    private String redisHost;
-
-    @Value("${spring.data.redis.port:6379}")
-    private int redisPort;
-
-    @Value("${spring.data.redis.timeout:2000}")
-    private int redisTimeout;
+    @Value("${spring.data.redis.host:localhost}") private String redisHost;
+    @Value("${spring.data.redis.port:6379}") private int redisPort;
+    @Value("${spring.data.redis.timeout:2000}") private int redisTimeout;
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .commandTimeout(Duration.ofMillis(redisTimeout))
-                .build();
-        return new LettuceConnectionFactory(config, clientConfig);
+        return new LettuceConnectionFactory(
+            new RedisStandaloneConfiguration(redisHost, redisPort),
+            LettuceClientConfiguration.builder().commandTimeout(Duration.ofMillis(redisTimeout)).build()
+        );
     }
 
-    @Bean
-    @Primary
-    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
-        objectMapper.findAndRegisterModules();
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
-        template.setHashValueSerializer(serializer);
-        template.afterPropertiesSet();
-        return template;
+    @Bean @Primary
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory cf) {
+        RedisTemplate<String, Object> t = new RedisTemplate<>();
+        t.setConnectionFactory(cf);
+        GenericJackson2JsonRedisSerializer ser = jsonSerializer();
+        t.setKeySerializer(new StringRedisSerializer());
+        t.setHashKeySerializer(new StringRedisSerializer());
+        t.setValueSerializer(ser);
+        t.setHashValueSerializer(ser);
+        return t;
     }
 
-    @Bean
-    @Primary
-    public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
-        objectMapper.findAndRegisterModules();
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-        RedisCacheConfiguration defaultCacheConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(15))
-                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(serializer))
-                .disableCachingNullValues();
-        return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(defaultCacheConfig)
-                .withCacheConfiguration("rfqs", defaultCacheConfig.entryTtl(Duration.ofMinutes(15)))
-                .withCacheConfiguration("bids", defaultCacheConfig.entryTtl(Duration.ofMinutes(10)))
-                .withCacheConfiguration("quotations", defaultCacheConfig.entryTtl(Duration.ofMinutes(20)))
-                .transactionAware()
-                .build();
+    @Bean @Primary
+    public CacheManager cacheManager(RedisConnectionFactory cf) {
+        GenericJackson2JsonRedisSerializer ser = jsonSerializer();
+        RedisCacheConfiguration cfg = RedisCacheConfiguration.defaultCacheConfig()
+            .entryTtl(Duration.ofMinutes(15))
+            .computePrefixWith(cacheName -> {
+                Long tenantId = TenantContext.getCurrentTenant();
+                return tenantId != null ? "tenant:" + tenantId + ":" + cacheName + "::" : cacheName + "::";
+            })
+            .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
+            .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(ser))
+            .disableCachingNullValues();
+        return RedisCacheManager.builder(cf)
+            .cacheDefaults(cfg)
+            .withCacheConfiguration("rfqs", cfg.entryTtl(Duration.ofMinutes(15)))
+            .withCacheConfiguration("bids", cfg.entryTtl(Duration.ofMinutes(10)))
+            .withCacheConfiguration("quotations", cfg.entryTtl(Duration.ofMinutes(20)))
+            .withCacheConfiguration("vendorNames", cfg.entryTtl(Duration.ofMinutes(30)))
+            .transactionAware()
+            .build();
+    }
+
+    private GenericJackson2JsonRedisSerializer jsonSerializer() {
+        ObjectMapper om = new ObjectMapper();
+        om.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
+            ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+        om.findAndRegisterModules();
+        return new GenericJackson2JsonRedisSerializer(om);
     }
 }

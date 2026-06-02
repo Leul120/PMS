@@ -1,5 +1,6 @@
 package com.procurement.authservice.exception;
 
+import com.procurement.authservice.tenant.TenantAccessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +34,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(error);
     }
     
+    @ExceptionHandler(TenantAccessException.class)
+    public ResponseEntity<ErrorResponse> handleTenantAccessException(TenantAccessException ex) {
+        log.warn("Tenant access violation: {}", ex.getMessage());
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(LocalDateTime.now())
+            .status(HttpStatus.FORBIDDEN.value())
+            .error("Forbidden")
+            .message(ex.getMessage())
+            .build();
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
         String msg = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";

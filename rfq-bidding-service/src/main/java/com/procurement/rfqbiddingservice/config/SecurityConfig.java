@@ -36,30 +36,33 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // ── RFQ endpoints ──
-                // POST /api/rfqs (create) - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.POST, "/api/rfqs").hasAnyRole("ADMIN", "OFFICER")
-                // POST /api/rfqs/{id}/close - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.POST, "/api/rfqs/*/close").hasAnyRole("ADMIN", "OFFICER")
-                // PUT /api/rfqs/{id} (update) - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.PUT, "/api/rfqs/*").hasAnyRole("ADMIN", "OFFICER")
-                // GET /api/rfqs/status/{status} - ADMIN, OFFICER, MANAGER, AUDITOR
-                .requestMatchers(HttpMethod.GET, "/api/rfqs/status/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
-                // GET /api/rfqs and /api/rfqs/{id} - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
-                .requestMatchers(HttpMethod.GET, "/api/rfqs", "/api/rfqs/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // POST /api/rfqs (create) - ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/rfqs").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // POST /api/rfqs/{id}/close - ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/rfqs/*/close").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/rfqs/*/cancel").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // PUT /api/rfqs/{id} (update) - ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.PUT, "/api/rfqs/*").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // GET /api/rfqs/status/{status} - internal roles + SUPER_ADMIN, DIRECTOR
+                .requestMatchers(HttpMethod.GET, "/api/rfqs/status/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
+                // GET /api/rfqs/{id}/winning-bid - internal procurement + officer roles
+                .requestMatchers(HttpMethod.GET, "/api/rfqs/*/winning-bid").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
+                // GET /api/rfqs and /api/rfqs/{id} - all roles including vendor
+                .requestMatchers(HttpMethod.GET, "/api/rfqs", "/api/rfqs/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
                 // ── Bid endpoints ──
-                // POST /api/bids/{id}/evaluate - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.POST, "/api/bids/*/evaluate").hasAnyRole("ADMIN", "OFFICER")
-                // POST /api/bids/{id}/award - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.POST, "/api/bids/*/award").hasAnyRole("ADMIN", "OFFICER")
-                // POST /api/bids (submit bid) - ADMIN, OFFICER, VENDOR
-                .requestMatchers(HttpMethod.POST, "/api/bids").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
-                // GET /api/bids/{id} - single bid detail - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
-                .requestMatchers(HttpMethod.GET, "/api/bids/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                // POST /api/bids/{id}/evaluate - ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/bids/*/evaluate").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // POST /api/bids/{id}/award - ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/bids/*/award").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                // POST /api/bids (submit bid) - vendor roles + ADMIN, OFFICER, SUPER_ADMIN
+                .requestMatchers(HttpMethod.POST, "/api/bids").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES")
+                // GET /api/bids/{id} - all roles including vendor
+                .requestMatchers(HttpMethod.GET, "/api/bids/*").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
                 // GET /api/bids/rfq/{id}/ranked - ADMIN, OFFICER, MANAGER, AUDITOR
-                .requestMatchers(HttpMethod.GET, "/api/bids/rfq/*/ranked").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
-                // GET /api/bids/rfq/{id}, /api/bids/vendor/{id} - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
-                .requestMatchers(HttpMethod.GET, "/api/bids/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/bids/rfq/*/ranked").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
+                // GET /api/bids/rfq/{id}, /api/bids/vendor/{id} - all roles including vendor
+                .requestMatchers(HttpMethod.GET, "/api/bids/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
                 .anyRequest().authenticated()
             )
@@ -73,8 +76,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

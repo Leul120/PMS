@@ -20,8 +20,8 @@ public class RFQClient {
     @CircuitBreaker(name = "rfqService", fallbackMethod = "getRFQByIdFallback")
     @Retry(name = "rfqService")
     public Map<String, Object> getRFQById(Long rfqId) {
-        return rfqWebClient.get()
-                .uri("/api/rfqs/{id}", rfqId)
+        return OutboundAuthFilter.apply(rfqWebClient.get()
+                .uri("/api/rfqs/{id}", rfqId))
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .doOnError(e -> log.error("Error fetching RFQ {}: {}", rfqId, e.getMessage()))
@@ -31,8 +31,8 @@ public class RFQClient {
     @CircuitBreaker(name = "rfqService", fallbackMethod = "getWinningBidFallback")
     @Retry(name = "rfqService")
     public Map<String, Object> getWinningBid(Long rfqId) {
-        return rfqWebClient.get()
-                .uri("/api/rfqs/{id}/winning-bid", rfqId)
+        return OutboundAuthFilter.apply(rfqWebClient.get()
+                .uri("/api/rfqs/{id}/winning-bid", rfqId))
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .doOnError(e -> log.error("Error fetching winning bid for RFQ {}: {}", rfqId, e.getMessage()))

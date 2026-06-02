@@ -22,4 +22,6 @@ public class PurchaseOrderRequest {
     private LocalDate expectedDeliveryDate;
     
     private Long bidId;
+
+    private Long requisitionId;
 }

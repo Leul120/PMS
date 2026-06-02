@@ -35,15 +35,15 @@ public class SecurityConfig {
                 // OPTIONS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // GET inventory items (list, by id, low-stock)
-                .requestMatchers(HttpMethod.GET, "/api/inventory/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/inventory/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
                 // POST stock adjustments
-                .requestMatchers(HttpMethod.POST, "/api/inventory/*/adjust").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/inventory/*/adjust").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // POST create inventory item
-                .requestMatchers(HttpMethod.POST, "/api/inventory").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/inventory").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // PUT update inventory item
-                .requestMatchers(HttpMethod.PUT, "/api/inventory/**").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.PUT, "/api/inventory/**").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // DELETE inventory item
-                .requestMatchers(HttpMethod.DELETE, "/api/inventory/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/inventory/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )
@@ -56,8 +56,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

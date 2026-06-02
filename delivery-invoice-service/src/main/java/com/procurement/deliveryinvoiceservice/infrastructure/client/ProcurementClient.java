@@ -31,7 +31,7 @@ public class ProcurementClient {
     @CircuitBreaker(name = "procurementService", fallbackMethod = "updatePOStatusFallback")
     @Retry(name = "procurementService")
     public Map<String, Object> updatePOStatus(Long poId, String status) {
-        return procurementWebClient.patch()
+        return procurementWebClient.put()
                 .uri("/api/purchase-orders/{id}/status?status={status}", poId, status)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})

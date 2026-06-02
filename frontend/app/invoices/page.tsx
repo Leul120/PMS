@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,13 +15,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { invoiceApi, poApi, threeWayMatchApi, deliveryApi, getVendorNameMap } from "@/lib/api";
+import { invoiceApi, disputeApi, poApi, threeWayMatchApi, deliveryApi, getCompanyNameMap, invoiceStatusQuery } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { RequireRole } from "@/components/require-role";
+import { useListDeepLink } from "@/hooks/use-list-deep-link";
+import { ProcurementPipelineBanner } from "@/components/procurement-pipeline-banner";
+import { WorkflowNextStep } from "@/components/workflow-next-step";
+
 import {
   FileText, Plus, Search, Scale, AlertTriangle, CheckCircle,
-  Loader2, XCircle, MessageSquare, Receipt, Clock, Filter,
+  Loader2, XCircle, MessageSquare, Receipt, Clock, Filter, ShieldCheck,
 } from "lucide-react";
 
 interface Invoice {
@@ -30,7 +36,7 @@ interface Invoice {
   poId: string;
   poNumber?: string;
   vendorId?: string;
-  vendorName?: string;
+  companyName?: string;
   invoiceAmount: number;
   status: string;
   discrepancyFlag?: boolean;
@@ -42,7 +48,12 @@ export default function InvoicesPage() {
   const [filteredInvoices, setFilteredInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const PAGE_SIZE = 50;
 
   // Submit invoice dialog (VENDOR)
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -67,56 +78,87 @@ export default function InvoicesPage() {
   const [disputeInvoice, setDisputeInvoice] = useState<Invoice | null>(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeLoading, setDisputeLoading] = useState(false);
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+
+  // Resolve dispute dialog
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolveInvoice, setResolveInvoice] = useState<Invoice | null>(null);
+  const [resolveResolution, setResolveResolution] = useState("");
+  const [resolveOutcome, setResolveOutcome] = useState<"APPROVE_INVOICE" | "REJECT_INVOICE">("APPROVE_INVOICE");
+  const [resolveLoading, setResolveLoading] = useState(false);
+  const [resolveDisputeId, setResolveDisputeId] = useState<string | null>(null);
+  const [resolveDisputeDesc, setResolveDisputeDesc] = useState<string>("");
 
   const { toast } = useToast();
   const user = useAuthStore((state) => state.user);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
-  const isVendor = user?.role === "VENDOR" || user?.roleName === "VENDOR";
+  const isVendor = hasRole(["VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE"]);
   const canValidate = hasPermission("three-way-match:validate");
   const canDispute = hasPermission("invoices:dispute");
+  const canResolveDispute = hasPermission("disputes:resolve");
+  const canMarkPaid = hasPermission("invoices:mark-paid");
   const canSubmitInvoice = hasPermission("invoices:create");
 
-  async function loadInvoices() {
+  const loadInvoices = useCallback(async (page = 0) => {
     try {
       setLoading(true);
 
       if (isVendor) {
-        // VENDOR — use the dedicated vendor invoice endpoint to avoid N+1
         const vendorId = user?.id || user?.userId;
         if (!vendorId) { setInvoices([]); setFilteredInvoices([]); return; }
 
         const raw = await invoiceApi.getByVendor(vendorId).catch(() => []);
-        const vendorMap = await getVendorNameMap();
-        const normalised = (raw as any[]).map((inv: any) => ({
+        const vendorMap = await getCompanyNameMap();
+        let normalised = (raw as any[]).map((inv: any) => ({
           id: String(inv.id || inv.invoiceId),
           invoiceNumber: inv.invoiceNumber || `INV-${String(inv.id || inv.invoiceId).padStart(6, "0")}`,
           poId: String(inv.poId || inv.purchaseOrderId || ""),
           poNumber: inv.poNumber || (inv.poId ? `PO-${String(inv.poId).padStart(6, "0")}` : "--"),
           vendorId: String(inv.vendorId || vendorId),
-          vendorName: inv.vendorName || vendorMap?.get(String(inv.vendorId || vendorId)) || "My Company",
+          companyName: inv.companyName || vendorMap?.get(String(inv.vendorId || vendorId)) || "My Company",
           invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
           status: inv.status || "PENDING",
           discrepancyFlag: inv.discrepancyFlag ?? false,
           createdAt: inv.createdAt || inv.invoiceDate,
         }));
+        if (statusFilter !== "ALL") {
+          normalised = normalised.filter((inv) => inv.status?.toUpperCase() === statusFilter);
+        }
+        if (debouncedSearch.trim()) {
+          const q = debouncedSearch.toLowerCase();
+          normalised = normalised.filter(
+            (inv) =>
+              inv.invoiceNumber?.toLowerCase().includes(q) ||
+              inv.poNumber?.toLowerCase().includes(q) ||
+              inv.status?.toLowerCase().includes(q)
+          );
+        }
         setInvoices(normalised);
         setFilteredInvoices(normalised);
+        setTotalPages(1);
+        setTotalElements(normalised.length);
       } else {
-        const [rawInvoices, vendorMap] = await Promise.all([
-          invoiceApi.getAll().catch(() => []),
-          getVendorNameMap(),
+        const [response, vendorMap] = await Promise.all([
+          invoiceApi.getAll({
+            page,
+            size: PAGE_SIZE,
+            search: debouncedSearch,
+            ...invoiceStatusQuery(statusFilter),
+            sort: "id-desc",
+          }),
+          getCompanyNameMap(),
         ]);
-        const normalised = (rawInvoices as any[]).map((inv: any) => {
+        const normalised = (response.content ?? []).map((inv: any) => {
           const vendorId = String(inv.vendorId || "");
-          const vendorName = inv.vendorName || vendorMap?.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "Unknown Vendor");
+          const companyName = displayVendorName(vendorId, { name: inv.companyName, map: vendorMap });
           return {
             id: String(inv.id || inv.invoiceId),
             invoiceNumber: inv.invoiceNumber || `INV-${String(inv.id || inv.invoiceId).padStart(6, "0")}`,
             poId: String(inv.poId || inv.purchaseOrderId || ""),
             poNumber: inv.poNumber || (inv.poId ? `PO-${String(inv.poId).padStart(6, "0")}` : "--"),
             vendorId,
-            vendorName,
+            companyName,
             invoiceAmount: Number(inv.invoiceAmount || inv.amount || 0),
             status: inv.status || "PENDING",
             discrepancyFlag: inv.discrepancyFlag ?? false,
@@ -125,6 +167,8 @@ export default function InvoicesPage() {
         });
         setInvoices(normalised);
         setFilteredInvoices(normalised);
+        setTotalPages(response.totalPages ?? 0);
+        setTotalElements(response.totalElements ?? 0);
       }
     } catch {
       setInvoices([]);
@@ -132,7 +176,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [debouncedSearch, statusFilter, isVendor, user]);
 
   async function loadPOs() {
     try {
@@ -157,28 +201,24 @@ export default function InvoicesPage() {
   }
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"])) return;
-    loadInvoices();
-    loadPOs();
-  }, [user]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
-    let filtered = invoices;
-    if (statusFilter !== "ALL") {
-      filtered = filtered.filter((inv) => inv.status?.toUpperCase() === statusFilter);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (inv) =>
-          inv.invoiceNumber?.toLowerCase().includes(q) ||
-          inv.poNumber?.toLowerCase().includes(q) ||
-          inv.vendorName?.toLowerCase().includes(q) ||
-          inv.status?.toLowerCase().includes(q)
-      );
-    }
-    setFilteredInvoices(filtered);
-  }, [searchQuery, statusFilter, invoices]);
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"])) return;
+    if (!isVendor) setCurrentPage(0);
+  }, [debouncedSearch, statusFilter, isVendor]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"])) return;
+    loadInvoices(currentPage);
+    loadPOs();
+  }, [user, currentPage, loadInvoices]);
+
+  useListDeepLink(invoices, loading, (inv) => setDetailInvoice(inv), {
+    paramNames: ["id", "poId", "disputeId"],
+  });
 
   async function handleSubmitInvoice() {
     if (!submitPoId || !submitAmount) {
@@ -197,7 +237,7 @@ export default function InvoicesPage() {
       setSubmitOpen(false);
       setSubmitPoId("");
       setSubmitAmount("");
-      loadInvoices();
+      loadInvoices(currentPage);
     } catch (err) {
       toast({
         title: "Error",
@@ -217,11 +257,35 @@ export default function InvoicesPage() {
     setMatchResult(null);
     setPoDeliveries([]);
     setMatchOpen(true);
-    // Pre-load deliveries for this PO so user picks by name, not raw ID
     try {
-      const delivs = await deliveryApi.getByPO(invoice.poId).catch(() => []);
-      setPoDeliveries(delivs as any[]);
-    } catch { setPoDeliveries([]); }
+      const [delivs, po] = await Promise.all([
+        deliveryApi.getByPO(invoice.poId).catch(() => []),
+        poApi.getById(invoice.poId).catch(() => null),
+      ]);
+      const deliveries = delivs as any[];
+      setPoDeliveries(deliveries);
+      if (po?.totalAmount != null) {
+        setMatchPoAmount(String(po.totalAmount));
+      }
+      const qtyFromPo = po?.expectedQuantity ?? po?.quantity;
+      if (qtyFromPo != null) {
+        setMatchPoQuantity(String(qtyFromPo));
+      } else if (deliveries.length === 1) {
+        const d = deliveries[0];
+        setMatchDeliveryId(String(d.deliveryId || d.id));
+        const qty = d.quantityDelivered ?? d.quantity;
+        if (qty != null) setMatchPoQuantity(String(qty));
+      }
+    } catch {
+      setPoDeliveries([]);
+    }
+  }
+
+  function handleMatchDeliverySelect(deliveryId: string) {
+    setMatchDeliveryId(deliveryId);
+    const delivery = poDeliveries.find((d: any) => String(d.deliveryId || d.id) === deliveryId);
+    const qty = delivery?.quantityDelivered ?? delivery?.quantity;
+    if (qty != null) setMatchPoQuantity(String(qty));
   }
 
   async function handleThreeWayMatch() {
@@ -239,9 +303,9 @@ export default function InvoicesPage() {
         parseInt(matchPoQuantity)
       );
       setMatchResult(result);
+      loadInvoices(currentPage);
       if (result.status === "MATCHED") {
         toast({ title: "3-Way Match Passed", description: "All values match. Invoice approved." });
-        loadInvoices();
       } else {
         toast({
           title: "Mismatch Detected",
@@ -271,7 +335,7 @@ export default function InvoicesPage() {
       toast({ title: "Dispute Raised", description: "The invoice has been flagged for dispute." });
       setDisputeOpen(false);
       setDisputeReason("");
-      loadInvoices();
+      loadInvoices(currentPage);
     } catch (err) {
       toast({
         title: "Error",
@@ -283,17 +347,80 @@ export default function InvoicesPage() {
     }
   }
 
+  async function openResolveDialog(invoice: Invoice) {
+    setResolveInvoice(invoice);
+    setResolveResolution("");
+    setResolveDisputeId(null);
+    setResolveDisputeDesc("");
+    setResolveOpen(true);
+    try {
+      const all = await disputeApi.getAll().catch(() => []);
+      const match = (all as any[]).find(
+        (d: any) =>
+          String(d.invoiceId) === String(invoice.id) &&
+          d.status?.toUpperCase() !== "RESOLVED"
+      );
+      if (match) {
+        setResolveDisputeId(String(match.disputeId || match.id));
+        setResolveDisputeDesc(match.description || "");
+      }
+    } catch { /* dispute record not critical to open dialog */ }
+  }
+
+  async function handleResolveDispute() {
+    if (!resolveInvoice || !resolveResolution.trim()) {
+      toast({ title: "Error", description: "Please provide a resolution", variant: "destructive" });
+      return;
+    }
+    if (!resolveDisputeId) {
+      toast({ title: "Error", description: "Dispute record not found for this invoice", variant: "destructive" });
+      return;
+    }
+    try {
+      setResolveLoading(true);
+      await disputeApi.resolve(resolveDisputeId, { resolution: resolveResolution, outcome: resolveOutcome });
+      toast({ title: "Dispute Resolved", description: "The dispute has been marked as resolved." });
+      setResolveOpen(false);
+      setResolveResolution("");
+      loadInvoices(currentPage);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to resolve dispute",
+        variant: "destructive",
+      });
+    } finally {
+      setResolveLoading(false);
+    }
+  }
+
+  async function handleMarkPaid(invoice: Invoice) {
+    try {
+      await invoiceApi.markPaid(invoice.id);
+      toast({ title: "Payment Recorded", description: `${invoice.invoiceNumber} marked as paid.` });
+      loadInvoices(currentPage);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to mark invoice as paid",
+        variant: "destructive",
+      });
+    }
+  }
+
   const stats = {
     total: invoices.length,
     pending: invoices.filter((i) => i.status?.toUpperCase() === "PENDING").length,
     approved: invoices.filter((i) => ["APPROVED", "VALIDATED"].includes(i.status?.toUpperCase())).length,
+    paid: invoices.filter((i) => i.status?.toUpperCase() === "PAID").length,
     disputed: invoices.filter((i) => i.status?.toUpperCase() === "DISPUTED" || i.discrepancyFlag).length,
   };
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
+          <ProcurementPipelineBanner activeStep="invoice" />
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
@@ -358,6 +485,7 @@ export default function InvoicesPage() {
                     <SelectItem value="ALL">All Statuses</SelectItem>
                     <SelectItem value="PENDING">Pending</SelectItem>
                     <SelectItem value="APPROVED">Approved</SelectItem>
+                    <SelectItem value="PAID">Paid</SelectItem>
                     <SelectItem value="VALIDATED">Validated</SelectItem>
                     <SelectItem value="DISPUTED">Disputed</SelectItem>
                   </SelectContent>
@@ -391,7 +519,7 @@ export default function InvoicesPage() {
                       </TableRow>
                     ) : (
                       filteredInvoices.map((inv) => (
-                        <TableRow key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                        <TableRow key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => setDetailInvoice(inv)}>
                           <TableCell className="text-xs font-medium py-2.5">
                             <div className="flex items-center gap-1.5">
                               <FileText className="h-3.5 w-3.5 text-gray-400" />
@@ -399,7 +527,7 @@ export default function InvoicesPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-xs py-2.5 text-gray-600">{inv.poNumber}</TableCell>
-                          <TableCell className="text-xs py-2.5 text-gray-600">{inv.vendorName}</TableCell>
+                          <TableCell className="text-xs py-2.5 text-gray-600">{inv.companyName}</TableCell>
                           <TableCell className="text-xs font-medium py-2.5">
                             ${inv.invoiceAmount.toLocaleString()}
                           </TableCell>
@@ -419,7 +547,7 @@ export default function InvoicesPage() {
                           <TableCell className="text-xs text-gray-500 py-2.5">
                             {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}
                           </TableCell>
-                          <TableCell className="py-2.5">
+                          <TableCell className="py-2.5" onClick={(e) => e.stopPropagation()}>
                             <div className="flex gap-1.5">
                               {canValidate && inv.status?.toUpperCase() === "PENDING" && (
                                 <Button
@@ -433,7 +561,7 @@ export default function InvoicesPage() {
                                   Validate
                                 </Button>
                               )}
-                              {canDispute && !["APPROVED", "VALIDATED"].includes(inv.status?.toUpperCase()) && (
+                              {canDispute && !["APPROVED", "VALIDATED", "DISPUTED"].includes(inv.status?.toUpperCase()) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -445,7 +573,36 @@ export default function InvoicesPage() {
                                   Dispute
                                 </Button>
                               )}
-                              {inv.status?.toUpperCase() === "APPROVED" && (
+                              {canResolveDispute && inv.status?.toUpperCase() === "DISPUTED" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                  onClick={() => openResolveDialog(inv)}
+                                  title="Resolve Dispute"
+                                >
+                                  <ShieldCheck className="h-3 w-3 mr-1" />
+                                  Resolve
+                                </Button>
+                              )}
+                              {canMarkPaid && inv.status?.toUpperCase() === "APPROVED" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                                  onClick={() => handleMarkPaid(inv)}
+                                  title="Record manual payment"
+                                >
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Mark Paid
+                                </Button>
+                              )}
+                              {inv.status?.toUpperCase() === "PAID" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-blue-600">
+                                  <CheckCircle className="h-3 w-3" /> Paid
+                                </span>
+                              )}
+                              {inv.status?.toUpperCase() === "APPROVED" && !canMarkPaid && (
                                 <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600">
                                   <CheckCircle className="h-3 w-3" /> Cleared
                                 </span>
@@ -458,9 +615,74 @@ export default function InvoicesPage() {
                   </TableBody>
                 </Table>
               )}
+              {!isVendor && (
+                <PaginationControls
+                  page={currentPage}
+                  totalPages={totalPages}
+                  totalElements={totalElements}
+                  size={PAGE_SIZE}
+                  onPageChange={(p) => setCurrentPage(p)}
+                  loading={loading}
+                />
+              )}
             </div>
           </div>
         </div>
+
+        {/* Invoice Detail Dialog */}
+        <Dialog open={!!detailInvoice} onOpenChange={(o) => !o && setDetailInvoice(null)}>
+          <DialogContent className="sm:max-w-[460px] rounded">
+            <DialogHeader>
+              <DialogTitle className="text-sm">{detailInvoice?.invoiceNumber}</DialogTitle>
+              <DialogDescription className="text-xs">Invoice details</DialogDescription>
+            </DialogHeader>
+            {detailInvoice && (
+              <div className="space-y-3 py-1 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><p className="text-gray-500">PO Reference</p><p className="font-medium mt-0.5">{detailInvoice.poNumber}</p></div>
+                  <div><p className="text-gray-500">Vendor</p><p className="font-medium mt-0.5">{detailInvoice.companyName}</p></div>
+                  <div><p className="text-gray-500">Amount</p><p className="font-semibold text-base mt-0.5">${detailInvoice.invoiceAmount.toLocaleString()}</p></div>
+                  <div><p className="text-gray-500">Status</p>
+                    {(() => {
+                      const label = detailInvoice.discrepancyFlag ? "DISCREPANCY" : detailInvoice.status;
+                      const cls = detailInvoice.discrepancyFlag ? "bg-red-100 text-red-700"
+                        : detailInvoice.status?.toUpperCase() === "APPROVED" || detailInvoice.status?.toUpperCase() === "VALIDATED" ? "bg-emerald-100 text-emerald-700"
+                        : detailInvoice.status?.toUpperCase() === "PENDING" ? "bg-amber-100 text-amber-700"
+                        : detailInvoice.status?.toUpperCase() === "DISPUTED" ? "bg-red-100 text-red-700"
+                        : "bg-gray-100 text-gray-600";
+                      return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${cls}`}>{label}</span>;
+                    })()}
+                  </div>
+                  <div><p className="text-gray-500">Date</p><p className="font-medium mt-0.5">{detailInvoice.createdAt ? new Date(detailInvoice.createdAt).toLocaleDateString() : "—"}</p></div>
+                  {detailInvoice.discrepancyFlag && (
+                    <div className="col-span-2"><span className="inline-flex items-center gap-1 text-[10px] text-red-600"><AlertTriangle className="h-3 w-3" />Discrepancy flagged on this invoice</span></div>
+                  )}
+                </div>
+                {detailInvoice.status?.toUpperCase() === "PENDING" && canValidate && (
+                  <p className="text-[11px] text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                    Run 3-way match against the PO and delivery receipt from the list, or use Validate on this row.
+                  </p>
+                )}
+                {detailInvoice.status?.toUpperCase() === "APPROVED" && canMarkPaid && (
+                  <WorkflowNextStep
+                    message="Invoice cleared — record payment to close the cycle."
+                    href="/invoices"
+                    linkLabel="Mark paid in list"
+                    variant="amber"
+                  />
+                )}
+                {detailInvoice.status?.toUpperCase() === "PAID" && (
+                  <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+                    Payment recorded — this procurement cycle is complete.
+                  </p>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setDetailInvoice(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Submit Invoice Dialog (Vendor) */}
         <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
@@ -537,7 +759,7 @@ export default function InvoicesPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs">Delivery Receipt *</Label>
                 {poDeliveries.length > 0 ? (
-                  <Select value={matchDeliveryId} onValueChange={setMatchDeliveryId}>
+                  <Select value={matchDeliveryId} onValueChange={handleMatchDeliverySelect}>
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Select a delivery receipt..." />
                     </SelectTrigger>
@@ -546,21 +768,20 @@ export default function InvoicesPage() {
                         const id = String(d.deliveryId || d.id);
                         const qty = d.quantityDelivered ?? d.quantity ?? "?";
                         const status = d.deliveryStatus || d.status || "";
+                        const date = d.actualDate || d.deliveryDate;
+                        const dateLabel = date ? new Date(date).toLocaleDateString() : "";
                         return (
                           <SelectItem key={id} value={id}>
-                            DEL-{id.padStart(6, "0")} — {qty} units ({status})
+                            DEL-{id.padStart(6, "0")} — {qty} units{dateLabel ? ` · ${dateLabel}` : ""}{status ? ` (${status})` : ""}
                           </SelectItem>
                         );
                       })}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input
-                    value={matchDeliveryId}
-                    onChange={(e) => setMatchDeliveryId(e.target.value)}
-                    placeholder="Enter delivery ID"
-                    className="h-8 text-xs"
-                  />
+                  <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-3 py-2">
+                    No delivery receipts found for {matchInvoice?.poNumber}. Record a delivery for this PO first.
+                  </p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -618,6 +839,68 @@ export default function InvoicesPage() {
                   Run Validation
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Resolve Dispute Dialog */}
+        <Dialog open={resolveOpen} onOpenChange={(o) => { setResolveOpen(o); if (!o) { setResolveResolution(""); setResolveDisputeId(null); } }}>
+          <DialogContent className="sm:max-w-[440px] rounded">
+            <DialogHeader>
+              <DialogTitle>Resolve Invoice Dispute</DialogTitle>
+              <DialogDescription>
+                Provide a resolution for the dispute on {resolveInvoice?.invoiceNumber}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {resolveDisputeId === null && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Looking up dispute record…
+                </div>
+              )}
+              {resolveDisputeId === null ? null : resolveDisputeDesc ? (
+                <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <p className="font-medium mb-0.5">Dispute reason:</p>
+                  <p>{resolveDisputeDesc}</p>
+                </div>
+              ) : null}
+              {resolveDisputeId !== null && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Outcome *</Label>
+                    <Select value={resolveOutcome} onValueChange={(v) => setResolveOutcome(v as "APPROVE_INVOICE" | "REJECT_INVOICE")}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="APPROVE_INVOICE">Approve invoice for payment</SelectItem>
+                        <SelectItem value="REJECT_INVOICE">Reject invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Label className="text-xs">Resolution notes *</Label>
+                  <Textarea
+                    value={resolveResolution}
+                    onChange={(e) => setResolveResolution(e.target.value)}
+                    placeholder="Describe how the dispute was resolved..."
+                    rows={4}
+                    className="text-xs resize-none"
+                  />
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setResolveOpen(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                disabled={resolveLoading || !resolveResolution.trim() || !resolveDisputeId}
+                onClick={handleResolveDispute}
+              >
+                {resolveLoading && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                Mark Resolved
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

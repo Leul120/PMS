@@ -1,6 +1,9 @@
 package com.procurement.inventoryservice.controller;
 
+import com.procurement.inventoryservice.dto.InventoryFilterOptionsResponse;
 import com.procurement.inventoryservice.dto.InventoryItemRequest;
+import com.procurement.inventoryservice.dto.InventoryStatsResponse;
+import com.procurement.inventoryservice.dto.InventoryStockStatus;
 import com.procurement.inventoryservice.dto.PagedResponse;
 import com.procurement.inventoryservice.entity.InventoryItem;
 import com.procurement.inventoryservice.service.InventoryService;
@@ -22,8 +25,24 @@ public class InventoryController {
     @GetMapping
     public ResponseEntity<PagedResponse<InventoryItem>> getAllItems(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(inventoryService.getAllItems(page, size));
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false, defaultValue = "ALL") InventoryStockStatus stockStatus,
+            @RequestParam(required = false, defaultValue = "name-asc") String sort) {
+        return ResponseEntity.ok(
+            inventoryService.getAllItems(page, size, search, category, location, stockStatus, sort));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<InventoryStatsResponse> getStats() {
+        return ResponseEntity.ok(inventoryService.getStats());
+    }
+
+    @GetMapping("/filter-options")
+    public ResponseEntity<InventoryFilterOptionsResponse> getFilterOptions() {
+        return ResponseEntity.ok(inventoryService.getFilterOptions());
     }
 
     @GetMapping("/{id}")

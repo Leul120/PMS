@@ -4,17 +4,26 @@ kind: Kustomization
 namespace: procurement
 
 resources:
+  # Namespace
   - namespace.yaml
+  # Config & Secrets
   - secrets.yaml
   - configmap.yaml
+  # Infrastructure — Redis (one per service)
+  - redis.yaml
   - redis-services.yaml
+  # Infrastructure — PostgreSQL (one per service)
   - postgres-auth.yaml
   - postgres-vendor.yaml
   - postgres-rfq.yaml
   - postgres-procurement.yaml
   - postgres-delivery.yaml
   - postgres-scoring.yaml
+  - postgres-inventory.yaml
+  - postgres-notification.yaml
+  # Infrastructure — Kafka
   - kafka.yaml
+  # Application Services
   - auth-service.yaml
   - vendor-service.yaml
   - rfq-bidding-service.yaml
@@ -22,8 +31,13 @@ resources:
   - delivery-invoice-service.yaml
   - scoring-service.yaml
   - analytics-service.yaml
+  - inventory-service.yaml
   - notification-service.yaml
   - api-gateway.yaml
+  - frontend.yaml
+  # Observability & Tooling
+  - kafka-ui.yaml
+  # Networking
   - metallb.yaml
   - ingress.yaml
 
@@ -46,7 +60,11 @@ images:
     newTag: latest
   - name: procurement/analytics-service
     newTag: latest
+  - name: procurement/inventory-service
+    newTag: latest
   - name: procurement/notification-service
     newTag: latest
   - name: procurement/api-gateway
+    newTag: latest
+  - name: procurement/frontend
     newTag: latest

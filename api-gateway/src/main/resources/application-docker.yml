@@ -5,6 +5,11 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:redis-auth}
+      port: ${REDIS_PORT:6379}
+      timeout: 3000ms
   cloud:
     gateway:
       routes:
@@ -73,6 +78,18 @@ spring:
           uri: http://auth-service:8081
           predicates:
             - Path=/api/admin/**
+          filters:
+            - StripPrefix=0
+        - id: auth-super-admin-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/super-admin/**
+          filters:
+            - StripPrefix=0
+        - id: auth-tenants
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/tenants/**
           filters:
             - StripPrefix=0
       globalcors:

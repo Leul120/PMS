@@ -40,6 +40,15 @@ public class JwtTokenProvider {
         return claims.get("email", String.class);
     }
 
+    public Long getTenantIdFromToken(String token) {
+        Claims claims = Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload();
+        Object tenantId = claims.get("tenantId");
+        if (tenantId == null) return null;
+        if (tenantId instanceof Long l) return l;
+        if (tenantId instanceof Integer i) return i.longValue();
+        return Long.parseLong(tenantId.toString());
+    }
+
     public String getRoleFromToken(String token) {
         Claims claims = Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload();
         return claims.get("role", String.class);

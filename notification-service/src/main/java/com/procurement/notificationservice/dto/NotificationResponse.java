@@ -20,6 +20,7 @@ public class NotificationResponse {
     private String status;
     private String category;
     private String relatedEntityId;
+    private String actionUrl;
     private LocalDateTime createdAt;
     private LocalDateTime sentAt;
     private LocalDateTime readAt;

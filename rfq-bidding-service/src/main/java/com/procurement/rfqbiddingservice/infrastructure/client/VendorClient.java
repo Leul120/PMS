@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -53,6 +54,8 @@ public class VendorClient {
     }
 
     /** Returns the company name for a vendor, or a safe fallback if the service is unavailable. */
+    @Cacheable(value = "vendorNames", key = "#vendorId",
+               unless = "#result == null || #result.startsWith('Vendor #')")
     public String getVendorName(Long vendorId) {
         if (vendorId == null) return null;
         try {
@@ -65,6 +68,28 @@ public class VendorClient {
             log.warn("Could not resolve vendor name for id {}: {}", vendorId, e.getMessage());
         }
         return "Vendor #" + vendorId;
+    }
+
+    @CircuitBreaker(name = "vendorService", fallbackMethod = "getVendorByUserIdFallback")
+    @Retry(name = "vendorService")
+    public Map<String, Object> getVendorByUserId(Long userId) {
+        return vendorWebClient.get()
+                .uri("/api/vendors/user/{userId}", userId)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .doOnError(e -> log.error("Error fetching vendor for userId {}: {}", userId, e.getMessage()))
+                .block();
+    }
+
+    @CircuitBreaker(name = "vendorService", fallbackMethod = "getVendorIdsByTenantIdFallback")
+    @Retry(name = "vendorService")
+    public List<Long> getVendorIdsByTenantId(Long tenantId) {
+        return vendorWebClient.get()
+                .uri("/api/vendors/by-tenant/{tenantId}/ids", tenantId)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<List<Long>>() {})
+                .doOnError(e -> log.error("Error fetching vendor IDs for tenant {}: {}", tenantId, e.getMessage()))
+                .block();
     }
 
     // Fallback methods
@@ -81,5 +106,15 @@ public class VendorClient {
     public Boolean verifyVendorFallback(Long vendorId, Throwable t) {
         log.warn("Vendor verification fallback for id {}: {}", vendorId, t.getMessage());
         return false;
+    }
+
+    public Map<String, Object> getVendorByUserIdFallback(Long userId, Throwable t) {
+        log.warn("Vendor by userId fallback for userId {}: {}", userId, t.getMessage());
+        return null;
+    }
+
+    public List<Long> getVendorIdsByTenantIdFallback(Long tenantId, Throwable t) {
+        log.warn("Vendor IDs by tenant fallback for tenantId {}: {}", tenantId, t.getMessage());
+        return List.of();
     }
 }

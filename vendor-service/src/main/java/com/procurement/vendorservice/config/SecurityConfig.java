@@ -32,32 +32,35 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // Vendor registration
-                .requestMatchers(HttpMethod.POST, "/api/vendors/register").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                // Vendor registration (admin/officer create on behalf; vendor admin registers own company)
+                .requestMatchers(HttpMethod.POST, "/api/vendors/register").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR_ADMIN")
                 // Vendor list
-                .requestMatchers(HttpMethod.GET, "/api/vendors").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
                 // Vendor by status
-                .requestMatchers(HttpMethod.GET, "/api/vendors/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
                 // Categories — permitAll for service-to-service lookups (e.g. rfq-bidding-service → vendor-service)
                 .requestMatchers(HttpMethod.GET, "/api/vendors/categories/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vendors/categories").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/vendors/categories").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // Documents
-                .requestMatchers(HttpMethod.GET, "/api/vendors/documents/expiring").hasAnyRole("ADMIN", "OFFICER", "MANAGER")
-                .requestMatchers(HttpMethod.DELETE, "/api/vendors/documents/**").hasAnyRole("ADMIN", "OFFICER")
-                .requestMatchers(HttpMethod.POST, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/documents/expiring").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/vendors/documents/**").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/documents/*/file").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.POST, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/*/documents").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
                 // Vendor verify
-                .requestMatchers(HttpMethod.POST, "/api/vendors/*/verify").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/vendors/*/verify").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // Vendor status update
-                .requestMatchers(HttpMethod.PUT, "/api/vendors/*/status").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.PUT, "/api/vendors/*/status").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
                 // Vendor by user
-                .requestMatchers(HttpMethod.GET, "/api/vendors/user/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/vendors/user/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
                 // Batch lookup — used by internal service-to-service calls (no JWT)
                 .requestMatchers(HttpMethod.POST, "/api/vendors/batch").permitAll()
+                // Tenant vendor IDs — used by rfq-bidding-service for email notifications (no JWT)
+                .requestMatchers(HttpMethod.GET, "/api/vendors/by-tenant/**").permitAll()
                 // Single vendor get — permitAll so procurement-service can call without JWT
                 .requestMatchers(HttpMethod.GET, "/api/vendors/*").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                .requestMatchers(HttpMethod.PUT, "/api/vendors/*").hasAnyRole("ADMIN", "OFFICER", "VENDOR_ADMIN")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -70,8 +73,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

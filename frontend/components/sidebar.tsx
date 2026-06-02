@@ -21,12 +21,13 @@ import {
   ClipboardList,
   Receipt,
   Star,
-  UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuthStore, UserRole } from "@/lib/auth-store";
+import type { OperatingContext } from "@/lib/operating-context";
+import { CONTEXT_LABELS } from "@/lib/operating-context";
 
 interface NavItem {
   name: string;
@@ -34,32 +35,49 @@ interface NavItem {
   icon: React.ElementType;
   allowedRoles: UserRole[];
   group: string;
+  /** Which operating context shows this link */
+  contexts: OperatingContext[];
 }
 
+const ALL_VENDOR: UserRole[] = ["VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "VENDOR_LOGISTICS"];
+
+const BUYER_ROLES: UserRole[] = ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "SUPER_ADMIN"];
+
 const navigation: NavItem[] = [
-  // Overview
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, allowedRoles: ["ADMIN", "OFFICER", "MANAGER"], group: "Overview" },
-  { name: "Dashboard", href: "/dashboard/vendor", icon: LayoutDashboard, allowedRoles: ["VENDOR"], group: "Overview" },
-  { name: "Dashboard", href: "/dashboard/auditor", icon: LayoutDashboard, allowedRoles: ["AUDITOR"], group: "Overview" },
-  // Procurement workflow
-  { name: "Vendors", href: "/vendors", icon: Building2, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Procurement" },
-  { name: "Requisitions", href: "/requisitions", icon: ClipboardList, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Procurement" },
-  { name: "Procurement", href: "/procurement", icon: ShoppingCart, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Procurement" },
-  { name: "RFQ & Bidding", href: "/rfq", icon: Gavel, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Procurement" },
-  { name: "Purchase Orders", href: "/orders", icon: FileText, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Procurement" },
-  // Operations
-  { name: "Deliveries", href: "/deliveries", icon: Truck, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Operations" },
-  { name: "Invoices", href: "/invoices", icon: Receipt, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Operations" },
-  { name: "Inventory", href: "/inventory", icon: Package, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Operations" },
-  // Reports
-  { name: "Analytics", href: "/analytics", icon: BarChart3, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Reports" },
-  { name: "Performance", href: "/vendors/performance", icon: Star, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Reports" },
-  // Admin & Account
-  { name: "Admin Panel", href: "/dashboard/admin", icon: Shield, allowedRoles: ["ADMIN"], group: "Admin" },
-  { name: "Team", href: "/users", icon: UserCog, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"], group: "Admin" },
-  // Account
-  { name: "Notifications", href: "/notifications", icon: Bell, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Account" },
-  { name: "Settings", href: "/settings", icon: Settings, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"], group: "Account" },
+  // ── Procurement context ──
+  { name: "Dashboard", href: "/", icon: LayoutDashboard, allowedRoles: ["ADMIN", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Dashboard", href: "/dashboard/officer", icon: LayoutDashboard, allowedRoles: ["OFFICER"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Dashboard", href: "/requisitions", icon: LayoutDashboard, allowedRoles: ["REQUESTER"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Dashboard", href: "/dashboard/manager", icon: LayoutDashboard, allowedRoles: ["MANAGER"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Dashboard", href: "/dashboard/director", icon: LayoutDashboard, allowedRoles: ["DIRECTOR"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Dashboard", href: "/dashboard/auditor", icon: LayoutDashboard, allowedRoles: ["AUDITOR"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Vendors", href: "/vendors", icon: Building2, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Requisitions", href: "/requisitions", icon: ClipboardList, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "RFQ & Bids", href: "/rfq", icon: Gavel, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "PO Approval", href: "/procurement", icon: ShoppingCart, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Order Tracking", href: "/orders", icon: FileText, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Deliveries", href: "/deliveries", icon: Truck, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Invoices", href: "/invoices", icon: Receipt, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Inventory", href: "/inventory", icon: Package, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Analytics", href: "/analytics", icon: BarChart3, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Vendor Performance", href: "/vendors/performance", icon: Star, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Procurement" },
+  { name: "Tenants", href: "/tenants", icon: Building2, allowedRoles: ["SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Admin" },
+  { name: "Admin Panel", href: "/dashboard/admin", icon: Shield, allowedRoles: ["ADMIN", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Admin" },
+  { name: "Team", href: "/users", icon: UserCog, allowedRoles: ["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"], contexts: ["PROCUREMENT"], group: "Admin" },
+
+  // ── Sales (supplier) context ──
+  { name: "Sales Dashboard", href: "/dashboard/vendor", icon: LayoutDashboard, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "Opportunities", href: "/rfq", icon: Gavel, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "Customer Orders", href: "/orders", icon: FileText, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "Shipments", href: "/deliveries", icon: Truck, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "Invoicing", href: "/invoices", icon: Receipt, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "My Performance", href: "/vendors/performance", icon: Star, allowedRoles: ALL_VENDOR, contexts: ["SALES"], group: "Sales Portal" },
+  { name: "My Company", href: "/company", icon: Building2, allowedRoles: ["VENDOR_ADMIN"], contexts: ["SALES"], group: "Sales Portal" },
+  { name: "Sales Team", href: "/users", icon: UserCog, allowedRoles: ["VENDOR_ADMIN"], contexts: ["SALES"], group: "Sales Portal" },
+
+  // ── Shared account ──
+  { name: "Notifications", href: "/notifications", icon: Bell, allowedRoles: [...BUYER_ROLES, ...ALL_VENDOR], contexts: ["PROCUREMENT", "SALES"], group: "Account" },
+  { name: "Settings", href: "/settings", icon: Settings, allowedRoles: [...BUYER_ROLES, ...ALL_VENDOR], contexts: ["PROCUREMENT", "SALES"], group: "Account" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -68,12 +86,18 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: "Manager",
   AUDITOR: "Auditor",
   VENDOR: "Vendor",
+  VENDOR_ADMIN: "Supplier Admin",
+  VENDOR_SALES: "Sales",
+  VENDOR_FINANCE: "Finance",
+  VENDOR_LOGISTICS: "Logistics",
+  REQUESTER: "Requester",
+  DIRECTOR: "Director",
+  SUPER_ADMIN: "Super Administrator",
 };
 
-const GROUP_ORDER = ["Overview", "Procurement", "Operations", "Reports", "Admin", "Account"];
+const GROUP_ORDER = ["Procurement", "Sales Portal", "Admin", "Account"];
 
 function NavLinks({ items, pathname }: { items: NavItem[]; pathname: string }) {
-  // Group items preserving GROUP_ORDER
   const grouped = GROUP_ORDER.reduce<Record<string, NavItem[]>>((acc, g) => {
     const groupItems = items.filter((i) => i.group === g);
     if (groupItems.length > 0) acc[g] = groupItems;
@@ -95,13 +119,13 @@ function NavLinks({ items, pathname }: { items: NavItem[]; pathname: string }) {
                 (item.href !== "/" && pathname.startsWith(`${item.href}/`));
               return (
                 <Link
-                  key={`${item.group}-${item.href}`}
+                  key={`${item.group}-${item.href}-${item.name}`}
                   href={item.href}
                   className={cn(
                     "flex items-center gap-3 rounded px-3 py-1.5 text-xs font-medium transition-colors",
                     isActive
                       ? "bg-primary/10 text-primary"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -119,6 +143,7 @@ function NavLinks({ items, pathname }: { items: NavItem[]; pathname: string }) {
 function SidebarFooter({ pathname }: { pathname: string }) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
+  const operatingContext = useAuthStore((state) => state.operatingContext);
   const role = user?.role || user?.roleName || "";
   const initials = (
     (user?.firstName?.[0] || "") + (user?.lastName?.[0] || "")
@@ -126,13 +151,16 @@ function SidebarFooter({ pathname }: { pathname: string }) {
 
   return (
     <div className="border-t border-gray-100 p-3 space-y-0.5">
+      <div className="px-3 py-1 text-[10px] text-gray-400">
+        {CONTEXT_LABELS[operatingContext]} · {ROLE_LABELS[role] || role}
+      </div>
       <Link
         href="/profile"
         className={cn(
           "flex items-center gap-3 rounded px-3 py-1.5 text-xs font-medium transition-colors",
           pathname === "/profile"
             ? "bg-primary/10 text-primary"
-            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
         )}
       >
         <div className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0">
@@ -142,11 +170,6 @@ function SidebarFooter({ pathname }: { pathname: string }) {
           <p className="truncate leading-none">
             {user?.firstName || user?.fullName?.split(" ")[0] || "Profile"}
           </p>
-          {role && (
-            <p className="text-[10px] text-gray-400 truncate mt-0.5 leading-none">
-              {ROLE_LABELS[role] || role}
-            </p>
-          )}
         </div>
       </Link>
       <Button
@@ -164,8 +187,14 @@ function SidebarFooter({ pathname }: { pathname: string }) {
 
 function useFilteredNav() {
   const user = useAuthStore((state) => state.user);
+  const operatingContext = useAuthStore((state) => state.operatingContext);
   const userRole = (user?.role || user?.roleName) as UserRole;
-  return navigation.filter((item) => item.allowedRoles.includes(userRole));
+
+  return navigation.filter(
+    (item) =>
+      item.contexts.includes(operatingContext) &&
+      item.allowedRoles.includes(userRole),
+  );
 }
 
 export function Sidebar() {
@@ -197,27 +226,19 @@ export function MobileSidebar() {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="lg:hidden">
-          <Menu className="h-5 w-5" />
-          <span className="sr-only">Toggle menu</span>
+        <Button variant="ghost" size="icon" className="lg:hidden h-8 w-8">
+          <Menu className="h-4 w-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[220px] p-0 bg-white">
-        <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-        <div className="flex h-full flex-col">
-          <div className="flex h-14 items-center border-b border-gray-100 px-4">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="bg-primary text-primary-foreground p-1.5 rounded-lg">
-                <Sparkles className="h-3.5 w-3.5" />
-              </div>
-              <span className="text-sm font-semibold text-gray-900">ProcurePro</span>
-            </Link>
-          </div>
-          <div className="flex-1 overflow-auto py-3 px-2">
-            <NavLinks items={allowedNavigation} pathname={pathname} />
-          </div>
-          <SidebarFooter pathname={pathname} />
+      <SheetContent side="left" className="w-[220px] p-0 flex flex-col">
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex h-14 items-center px-4 border-b border-gray-100">
+          <span className="text-sm font-semibold text-gray-900">ProcurePro</span>
         </div>
+        <div className="flex-1 overflow-auto py-3 px-2">
+          <NavLinks items={allowedNavigation} pathname={pathname} />
+        </div>
+        <SidebarFooter pathname={pathname} />
       </SheetContent>
     </Sheet>
   );

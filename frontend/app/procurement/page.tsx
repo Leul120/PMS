@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +14,21 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { poApi, getVendorNameMap } from "@/lib/api";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { poApi, getVendorNameMap, poStatusQuery, poTabQuery, resolveVendorIdsFromSearch } from "@/lib/api";
+import { displayVendorName, formatRfqRef } from "@/lib/display";
 import { useToast } from "@/hooks/use-toast";
 import { PODialog } from "./po-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ProcurementPipelineBanner } from "@/components/procurement-pipeline-banner";
+import { PoApprovalBadge } from "@/components/po-approval-badge";
+import { WorkflowNextStep } from "@/components/workflow-next-step";
+import { canRoleApprovePo } from "@/lib/po-approval";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RequireRole } from "@/components/require-role";
+import { useListDeepLink } from "@/hooks/use-list-deep-link";
 import { useAuthStore } from "@/lib/auth-store";
 import {
   Plus, Search, Filter, MoreHorizontal, Download, Loader2,
@@ -73,36 +84,49 @@ export default function ProcurementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+  const [detailPO, setDetailPO] = useState<PurchaseOrder | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const PAGE_SIZE = 50;
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [activeTab, setActiveTab] = useState("all");
+  const [prefillRfqId, setPrefillRfqId] = useState<string | undefined>();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { toast } = useToast();
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
   const canCreatePO = hasPermission("po:create");
   const canApprovePO = hasPermission("po:approve");
   const canRejectPO = hasPermission("po:reject");
+  const userRole = useAuthStore((state) => state.user?.role || state.user?.roleName);
 
-  useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
-    loadPurchaseOrders(currentPage);
-  }, [currentPage]);
-
-  async function loadPurchaseOrders(page = 0) {
+  const loadPurchaseOrders = useCallback(async (page = 0) => {
     try {
       setLoading(true);
-      const [response, vendorMap] = await Promise.all([
-        poApi.getAll(page, PAGE_SIZE),
-        getVendorNameMap(),
-      ]);
+      const vendorMap = await getVendorNameMap();
+      const vendorIds = resolveVendorIdsFromSearch(debouncedSearch, Object.fromEntries(vendorMap));
+      const tabQuery = activeTab === "all" ? poStatusQuery(statusFilter) : poTabQuery(activeTab);
+      const response = await poApi.getAll({
+        page,
+        size: PAGE_SIZE,
+        search: debouncedSearch,
+        vendorIds: vendorIds.length ? vendorIds : undefined,
+        ...tabQuery,
+        sort: "id-desc",
+      });
       const items = response.content ?? [];
       const normalised = items.map((po: any) => {
         const vendorId = String(po.vendorId || "");
-        const companyName = po.companyName || vendorMap.get(vendorId) || (vendorId ? `Vendor #${vendorId}` : "N/A");
+        const companyName = displayVendorName(vendorId, {
+          name: po.vendorName || po.companyName,
+          map: vendorMap,
+          empty: "N/A",
+        });
         return {
           ...po,
           id: String(po.id || po.poId),
@@ -124,23 +148,33 @@ export default function ProcurementPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeTab, debouncedSearch, statusFilter]);
 
   useEffect(() => {
-    let filtered = purchaseOrders;
-    if (statusFilter !== "ALL") filtered = filtered.filter((po) => po.status === statusFilter);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (po) =>
-          po.poNumber?.toLowerCase().includes(q) ||
-          po.companyName?.toLowerCase().includes(q) ||
-          po.description?.toLowerCase().includes(q) ||
-          po.status?.toLowerCase().includes(q)
-      );
-    }
-    setFilteredOrders(filtered);
-  }, [searchQuery, purchaseOrders, statusFilter]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"])) return;
+    setCurrentPage(0);
+  }, [debouncedSearch, statusFilter, activeTab]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"])) return;
+    loadPurchaseOrders(currentPage);
+  }, [currentPage, loadPurchaseOrders]);
+
+  useListDeepLink(purchaseOrders, loading, (po) => setDetailPO(po), { paramNames: ["id"] });
+
+  useEffect(() => {
+    const rfqId = searchParams.get("rfqId");
+    if (!rfqId || !canCreatePO) return;
+    setPrefillRfqId(rfqId);
+    setSelectedPO(null);
+    setDialogOpen(true);
+    router.replace("/procurement", { scroll: false });
+  }, [searchParams, canCreatePO, router]);
 
   function handleExport() {
     const headers = ["PO Number", "Description", "Vendor", "Status", "Priority", "Total Amount", "Created At", "Delivery Date"];
@@ -188,11 +222,11 @@ export default function ProcurementPage() {
   const isPending = (status: string) =>
     status?.toLowerCase().includes("pending") || status?.toLowerCase() === "draft";
 
-  const pendingOrders = purchaseOrders.filter((po) => isPending(po.status));
-  const approvedOrders = purchaseOrders.filter(
+  const pendingOrders = activeTab === "pending" ? purchaseOrders : purchaseOrders.filter((po) => isPending(po.status));
+  const approvedOrders = activeTab === "approved" ? purchaseOrders : purchaseOrders.filter(
     (po) => po.status?.toLowerCase().includes("approved") && !po.status?.toLowerCase().includes("pending")
   );
-  const rejectedOrders = purchaseOrders.filter((po) => po.status?.toLowerCase().includes("rejected"));
+  const rejectedOrders = activeTab === "rejected" ? purchaseOrders : purchaseOrders.filter((po) => po.status?.toLowerCase().includes("rejected"));
   const totalSpend = approvedOrders.reduce((s, po) => s + po.totalAmount, 0);
 
   const statCards = [
@@ -227,6 +261,7 @@ export default function ProcurementPage() {
     showActions?: boolean;
     showDate?: boolean;
   }) {
+
     if (orders.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -259,7 +294,7 @@ export default function ProcurementPage() {
         </TableHeader>
         <TableBody>
           {orders.map((po) => (
-            <TableRow key={po.id} className="hover:bg-gray-50 transition-colors">
+            <TableRow key={po.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setDetailPO(po)}>
               <TableCell className="font-medium text-xs">
                 <span className="font-mono">{po.poNumber}</span>
               </TableCell>
@@ -271,14 +306,17 @@ export default function ProcurementPage() {
                 ${po.totalAmount?.toLocaleString() || "0"}
               </TableCell>
               <TableCell>
-                {statusChip(po.status)}
+                <div className="flex flex-col items-start gap-0.5">
+                  {statusChip(po.status)}
+                  <PoApprovalBadge amount={po.totalAmount} status={po.status} />
+                </div>
               </TableCell>
               {showDate && (
                 <TableCell className="text-xs text-gray-500">
                   <span title={new Date(po.createdAt).toLocaleString()}>{daysAgo(po.createdAt)}</span>
                 </TableCell>
               )}
-              <TableCell className="text-right">
+              <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                 {showActions && isPending(po.status) && (canApprovePO || canRejectPO) ? (
                   <div className="flex items-center justify-end gap-1.5">
                     {canRejectPO && (
@@ -343,14 +381,15 @@ export default function ProcurementPage() {
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
+          <ProcurementPipelineBanner activeStep="po" />
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Procurement</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Manage purchase orders from creation to approval</p>
+              <h1 className="text-xl font-semibold text-gray-900">PO Approval</h1>
+              <p className="text-xs text-gray-500 mt-0.5">Create and approve purchase orders after RFQ award</p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5" onClick={handleExport}>
@@ -402,7 +441,7 @@ export default function ProcurementPage() {
                 size="sm"
                 variant="outline"
                 className="ml-auto h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
-                onClick={() => document.querySelector('[data-value="pending"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }))}
+                onClick={() => setActiveTab("pending")}
               >
                 Review Now
               </Button>
@@ -410,7 +449,7 @@ export default function ProcurementPage() {
           )}
 
           {/* Tabs */}
-          <Tabs defaultValue="all">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all" data-value="all">
                 All Orders
@@ -559,10 +598,69 @@ export default function ProcurementPage() {
 
         <PODialog
           open={dialogOpen}
-          onOpenChange={(open) => { setDialogOpen(open); if (!open) setSelectedPO(null); }}
-          onSuccess={loadPurchaseOrders}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setSelectedPO(null);
+              setPrefillRfqId(undefined);
+            }
+          }}
+          onSuccess={() => loadPurchaseOrders(currentPage)}
+          initialRfqId={prefillRfqId}
           initialData={selectedPO}
         />
+
+        <Dialog open={!!detailPO} onOpenChange={(o) => !o && setDetailPO(null)}>
+          <DialogContent className="sm:max-w-[480px] rounded">
+            <DialogHeader>
+              <DialogTitle className="text-sm">{detailPO?.poNumber}</DialogTitle>
+              <DialogDescription className="text-xs">Purchase order details</DialogDescription>
+            </DialogHeader>
+            {detailPO && (
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-gray-500">Status</p>
+                    <div className="mt-0.5 flex flex-col items-start gap-0.5">
+                      {statusChip(detailPO.status)}
+                      <PoApprovalBadge amount={detailPO.totalAmount} status={detailPO.status} className="max-w-none" />
+                    </div>
+                  </div>
+                  <div><p className="text-gray-500">Vendor</p><p className="font-medium mt-0.5">{detailPO.companyName || "—"}</p></div>
+                  <div><p className="text-gray-500">Total Amount</p><p className="font-semibold text-base mt-0.5">${detailPO.totalAmount?.toLocaleString()}</p></div>
+                  <div><p className="text-gray-500">Priority</p><p className="font-medium mt-0.5">{detailPO.priority || "—"}</p></div>
+                  <div><p className="text-gray-500">Submitted</p><p className="font-medium mt-0.5">{detailPO.createdAt ? new Date(detailPO.createdAt).toLocaleDateString() : "—"}</p></div>
+                  <div><p className="text-gray-500">Expected Delivery</p><p className="font-medium mt-0.5">{detailPO.deliveryDate ? new Date(detailPO.deliveryDate).toLocaleDateString() : "—"}</p></div>
+                  {detailPO.rfqId && (
+                    <div>
+                      <p className="text-gray-500">Linked RFQ</p>
+                      <p className="font-medium mt-0.5">{formatRfqRef(detailPO.rfqId)}</p>
+                    </div>
+                  )}
+                </div>
+                {(detailPO.description || detailPO.title) && (
+                  <div><p className="text-gray-500 mb-0.5">Description</p><p className="text-gray-700">{detailPO.description || detailPO.title}</p></div>
+                )}
+                {isPending(detailPO.status) && !canRoleApprovePo(detailPO.totalAmount, userRole) && (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    Your role cannot approve this amount. A Manager or Director must review it.
+                  </p>
+                )}
+                {detailPO.status?.toLowerCase().includes("approved") &&
+                  !detailPO.status?.toLowerCase().includes("pending") && (
+                  <WorkflowNextStep
+                    message="PO approved — log delivery and receipt next."
+                    href={`/orders?id=${detailPO.id}`}
+                    linkLabel="Order Tracking"
+                  />
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setDetailPO(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DashboardLayout>
     </RequireRole>
   );

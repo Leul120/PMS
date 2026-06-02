@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { notificationApi } from "@/lib/api";
+import { resolveNotificationRoute, isNotificationUnread } from "@/lib/notification-routes";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/auth-store";
 import { RequireRole } from "@/components/require-role";
@@ -14,6 +16,7 @@ import {
   Info,
   Clock,
   Loader2,
+  ChevronRight,
 } from "lucide-react";
 
 function timeAgo(dateStr: string) {
@@ -34,37 +37,93 @@ interface Notification {
   message: string;
   status: string;
   category: string;
+  relatedEntityId?: string | null;
+  actionUrl?: string | null;
   createdAt: string;
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const { toast } = useToast();
   const user = useAuthStore((state) => state.user);
 
-  async function loadNotifications() {
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadNotifications = useCallback(async () => {
+    const userId = user?.userId || user?.id;
+    if (!userId) {
+      setNotifications([]);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const userId = user?.userId || user?.id;
-      if (userId) {
-        const data = await notificationApi.getUserNotifications(userId).catch(() => []);
-        setNotifications(data || []);
-      }
-    } catch {
-      // silently ignore — show empty state
+      setLoadError(null);
+      const data = await notificationApi.getUserNotifications(userId);
+      setNotifications(
+        (data || []).map((n: Record<string, unknown>) => ({
+          notificationId: String(n.notificationId ?? n.id ?? ""),
+          title: String(n.title ?? ""),
+          message: String(n.message ?? ""),
+          status: String(n.status ?? ""),
+          category: String(n.category ?? ""),
+          relatedEntityId: n.relatedEntityId != null ? String(n.relatedEntityId) : null,
+          actionUrl: n.actionUrl != null ? String(n.actionUrl) : null,
+          createdAt: String(n.createdAt ?? new Date().toISOString()),
+        }))
+      );
+    } catch (err) {
       setNotifications([]);
+      setLoadError(err instanceof Error ? err.message : "Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
     loadNotifications();
-  }, [user]);
+  }, [user, loadNotifications]);
 
-  async function handleMarkAsRead(notificationId: string) {
+  async function handleNotificationClick(notification: Notification) {
+    const route = resolveNotificationRoute(notification);
+    if (!route) {
+      toast({
+        title: "No linked page",
+        description: "This notification does not have a destination.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setNavigatingId(notification.notificationId);
+    try {
+      if (isNotificationUnread(notification.status)) {
+        await notificationApi.markAsRead(notification.notificationId).catch(() => {});
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.notificationId === notification.notificationId ? { ...n, status: "READ" } : n
+          )
+        );
+      }
+      router.push(route);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Could not open notification",
+        variant: "destructive",
+      });
+    } finally {
+      setNavigatingId(null);
+    }
+  }
+
+  async function handleMarkAsRead(notificationId: string, e?: React.MouseEvent) {
+    e?.stopPropagation();
     try {
       await notificationApi.markAsRead(notificationId);
       toast({ title: "Success", description: "Notification marked as read" });
@@ -80,35 +139,44 @@ export default function NotificationsPage() {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case "BID_DEADLINE": return <Clock className="h-4 w-4 text-amber-500" />;
-      case "APPROVAL_PENDING": return <AlertTriangle className="h-4 w-4 text-rose-500" />;
-      case "DELIVERY_UPDATE": return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-      default: return <Info className="h-4 w-4 text-blue-500" />;
+      case "BID_DEADLINE":
+      case "RFQ":
+      case "BID":
+        return <Clock className="h-4 w-4 text-amber-500" />;
+      case "APPROVAL_PENDING":
+      case "PURCHASE_ORDER":
+      case "APPROVAL":
+        return <AlertTriangle className="h-4 w-4 text-rose-500" />;
+      case "DELIVERY":
+      case "DELIVERY_UPDATE":
+        return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+      default:
+        return <Info className="h-4 w-4 text-blue-500" />;
     }
   };
 
-  const unreadCount = notifications.filter(n => n.status === 'PENDING').length;
+  const unreadCount = notifications.filter((n) => isNotificationUnread(n.status)).length;
 
   async function handleMarkAllAsRead() {
-    const unread = notifications.filter(n => n.status === 'PENDING');
+    const unread = notifications.filter((n) => isNotificationUnread(n.status));
     if (unread.length === 0) return;
     try {
-      await Promise.all(unread.map(n => notificationApi.markAsRead(n.notificationId)));
+      await Promise.all(unread.map((n) => notificationApi.markAsRead(n.notificationId)));
       toast({ title: "All marked as read", description: `${unread.length} notifications marked as read` });
       loadNotifications();
-    } catch (err) {
+    } catch {
       toast({ title: "Error", description: "Failed to mark all as read", variant: "destructive" });
     }
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "VENDOR_LOGISTICS", "SUPER_ADMIN"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Notifications</h1>
-            <p className="text-xs text-gray-500 mt-0.5">Stay up to date on approvals, deliveries, and deadlines</p>
+            <p className="text-xs text-gray-500 mt-0.5">Tap a notification to jump to the related page</p>
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
@@ -123,6 +191,16 @@ export default function NotificationsPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="flex items-center gap-2 px-4 py-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {loadError}
+            <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={loadNotifications}>
+              Retry
+            </Button>
+          </div>
+        )}
+
         <div className="space-y-2">
           {loading ? (
             <div className="border border-gray-200 rounded p-12 text-center">
@@ -136,52 +214,71 @@ export default function NotificationsPage() {
             </div>
           ) : null}
 
-          {!loading && notifications.map((notification) => (
-            <div
-              key={notification.notificationId}
-              className={`border border-gray-200 rounded p-4 transition-colors ${
-                notification.status === "PENDING"
-                  ? "border-l-4 border-l-primary bg-primary/[0.02]"
-                  : "opacity-75"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0">
-                  {getCategoryIcon(notification.category)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h3 className={`text-xs font-medium ${notification.status === "PENDING" ? "text-gray-900" : "text-gray-600"}`}>
-                        {notification.title}
-                      </h3>
-                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{notification.message}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {timeAgo(notification.createdAt)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {notification.status === "PENDING" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-[10px] px-2 border-gray-200"
-                          onClick={() => handleMarkAsRead(notification.notificationId)}
-                        >
-                          Mark Read
-                        </Button>
-                      )}
-                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        notification.status === "PENDING" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
-                      }`}>
-                        {notification.status === "PENDING" ? "Unread" : "Read"}
-                      </span>
+          {!loading && notifications.map((notification) => {
+            const route = resolveNotificationRoute(notification);
+            const unread = isNotificationUnread(notification.status);
+            const isNavigating = navigatingId === notification.notificationId;
+
+            return (
+              <button
+                key={notification.notificationId}
+                type="button"
+                onClick={() => handleNotificationClick(notification)}
+                disabled={!route || isNavigating}
+                className={`w-full text-left border border-gray-200 rounded p-4 transition-colors ${
+                  unread
+                    ? "border-l-4 border-l-primary bg-primary/[0.02] hover:bg-primary/[0.04]"
+                    : "opacity-75 hover:bg-gray-50"
+                } ${route ? "cursor-pointer" : "cursor-default"} ${isNavigating ? "opacity-60" : ""}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {getCategoryIcon(notification.category)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className={`text-xs font-medium ${unread ? "text-gray-900" : "text-gray-600"}`}>
+                          {notification.title}
+                        </h3>
+                        <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed line-clamp-2">
+                          {notification.message}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {timeAgo(notification.createdAt)}
+                          {route && (
+                            <span className="ml-2 text-primary/70">Tap to open</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {unread && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[10px] px-2 border-gray-200"
+                            onClick={(e) => handleMarkAsRead(notification.notificationId, e)}
+                          >
+                            Mark Read
+                          </Button>
+                        )}
+                        {route && (
+                          isNavigating
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                            : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                        )}
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          unread ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                        }`}>
+                          {unread ? "Unread" : "Read"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </div>
     </DashboardLayout>

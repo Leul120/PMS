@@ -50,4 +50,21 @@ public class JwtTokenProvider {
         Claims claims = Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload();
         return claims.getExpiration();
     }
+
+    public Long getTenantIdFromToken(String token) {
+        Claims claims = Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload();
+        Object tenantId = claims.get("tenantId");
+        if (tenantId == null) return null;
+        if (tenantId instanceof Long l) return l;
+        if (tenantId instanceof Integer i) return i.longValue();
+        return Long.parseLong(tenantId.toString());
+    }
+
+    public String getJtiFromToken(String token) {
+        return Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload().getId();
+    }
+
+    public Date getIssuedAtFromToken(String token) {
+        return Jwts.parser().verifyWith(jwtSecret).build().parseSignedClaims(token).getPayload().getIssuedAt();
+    }
 }

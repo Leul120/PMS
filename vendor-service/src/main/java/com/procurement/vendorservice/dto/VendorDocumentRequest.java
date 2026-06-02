@@ -10,15 +10,12 @@ import java.time.LocalDate;
 public class VendorDocumentRequest {
     @NotBlank
     private String documentType;
-    
+
     @NotBlank
     private String documentName;
-    
-    @NotBlank
-    private String fileUrl;
-    
+
     private LocalDate issueDate;
-    
+
     @NotNull
     private LocalDate expiryDate;
 }

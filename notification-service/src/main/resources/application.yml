@@ -7,6 +7,8 @@ spring:
       enabled: true
   application:
     name: notification-service
+  transaction:
+    default-timeout: 30
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/notificationdb}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -29,7 +31,7 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     consumer:
       group-id: notification-service-group
       auto-offset-reset: earliest
@@ -39,13 +41,18 @@ spring:
         spring.json.trusted.packages: "com.procurement.*,java.util.*"
         spring.json.use.type.headers: false
         spring.json.value.default.type: java.util.HashMap
+        session.timeout.ms: 45000
+        heartbeat.interval.ms: 15000
+        max.poll.interval.ms: 300000
     listener:
       missing-topics-fatal: false
+      concurrency: 3
+      shutdown-timeout: 30s
   mail:
     host: ${SMTP_HOST:smtp.gmail.com}
     port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME:leulmelkamu15@gmail.com}
-    password: ${SMTP_PASSWORD:rgsh oyvz mdbr fydw}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -63,6 +70,6 @@ jwt:
   secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 logging:
   level:
-    com.procurement: DEBUG
+    com.procurement: INFO
 
 

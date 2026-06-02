@@ -32,4 +32,6 @@ public class RFQResponse {
     private String category;
     private Integer expectedQuantity;
     private Integer bidCount;
+
+    private Long requisitionId;
 }

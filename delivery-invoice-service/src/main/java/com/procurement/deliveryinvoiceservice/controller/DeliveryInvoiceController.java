@@ -3,9 +3,11 @@ package com.procurement.deliveryinvoiceservice.controller;
 import com.procurement.deliveryinvoiceservice.dto.*;
 import com.procurement.deliveryinvoiceservice.entity.Delivery;
 import com.procurement.deliveryinvoiceservice.entity.Invoice;
+import com.procurement.deliveryinvoiceservice.infrastructure.client.VendorClient;
 import com.procurement.deliveryinvoiceservice.service.DeliveryInvoiceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,13 +15,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class DeliveryInvoiceController {
 
     private final DeliveryInvoiceService service;
+    private final VendorClient vendorClient;
 
     /** Reads the authenticated userId from the SecurityContext principal.
      *  Set by JwtAuthenticationFilter after validating the JWT — never from a header. */
@@ -43,14 +48,7 @@ public class DeliveryInvoiceController {
 
     @PostMapping("/deliveries")
     public ResponseEntity<Delivery> createDelivery(@Valid @RequestBody DeliveryRequest request) {
-        return ResponseEntity.ok(service.createDelivery(
-                request.getPoId(),
-                request.getVendorId(),
-                request.getExpectedDate(),
-                request.getActualDate(),
-                request.getQuantityDelivered(),
-                request.getIssueNotes(),
-                request.getQualityRemarks()));
+        return ResponseEntity.ok(service.createDelivery(request));
     }
 
     @GetMapping("/deliveries/po/{poId}")
@@ -68,18 +66,39 @@ public class DeliveryInvoiceController {
     @GetMapping("/deliveries")
     public ResponseEntity<PagedResponse<Delivery>> getAllDeliveries(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(service.getAllDeliveries(page, size));
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String statuses,
+            @RequestParam(required = false, defaultValue = "id-desc") String sort) {
+        return ResponseEntity.ok(service.getAllDeliveries(page, size, search, status, statuses, sort));
     }
 
     // ── Invoices ─────────────────────────────────────────────────────────────
 
     @PostMapping("/invoices")
     public ResponseEntity<Invoice> submitInvoice(@Valid @RequestBody InvoiceRequest request) {
-        return ResponseEntity.ok(service.submitInvoice(
-                request.getPoId(),
-                request.getInvoiceAmount(),
-                request.getVendorId()));
+        Long vendorId = request.getVendorId();
+        // For vendor roles, always derive vendorId from the authenticated user's profile
+        if (isVendorRole()) {
+            Long userId = currentUserId();
+            try {
+                Map<String, Object> profile = vendorClient.getVendorByUserId(userId);
+                if (profile != null && profile.get("vendorId") != null) {
+                    vendorId = ((Number) profile.get("vendorId")).longValue();
+                }
+            } catch (Exception e) {
+                log.warn("Could not resolve vendorId from JWT for invoice submission, userId {}: {}", userId, e.getMessage());
+            }
+        }
+        return ResponseEntity.ok(service.submitInvoice(request.getPoId(), request.getInvoiceAmount(), vendorId));
+    }
+
+    private boolean isVendorRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().startsWith("ROLE_VENDOR_"));
     }
 
     @GetMapping("/invoices/po/{poId}")
@@ -90,8 +109,14 @@ public class DeliveryInvoiceController {
     @GetMapping("/invoices")
     public ResponseEntity<PagedResponse<Invoice>> getAllInvoices(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(service.getAllInvoices(page, size));
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String statuses,
+            @RequestParam(required = false) Long vendorId,
+            @RequestParam(required = false, defaultValue = "id-desc") String sort) {
+        return ResponseEntity.ok(service.getAllInvoices(
+            page, size, search, status, statuses, vendorId, sort));
     }
 
     @GetMapping("/invoices/vendor/{vendorId}")
@@ -112,6 +137,11 @@ public class DeliveryInvoiceController {
             @PathVariable Long invoiceId,
             @RequestParam String reason) {
         return ResponseEntity.ok(service.disputeInvoice(invoiceId, reason));
+    }
+
+    @PostMapping("/invoices/{invoiceId}/mark-paid")
+    public ResponseEntity<Invoice> markInvoicePaid(@PathVariable Long invoiceId) {
+        return ResponseEntity.ok(service.markInvoicePaid(invoiceId, currentUserId()));
     }
 
     // ── 3-Way Match ──────────────────────────────────────────────────────────

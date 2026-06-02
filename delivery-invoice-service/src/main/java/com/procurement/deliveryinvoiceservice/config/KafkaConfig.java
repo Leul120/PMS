@@ -23,4 +23,20 @@ public class KafkaConfig {
             .replicas(1)
             .build();
     }
+
+    @Bean
+    public NewTopic disputeRaisedTopic() {
+        return TopicBuilder.name("dispute.raised")
+            .partitions(3)
+            .replicas(1)
+            .build();
+    }
+
+    @Bean
+    public NewTopic disputeResolvedTopic() {
+        return TopicBuilder.name("dispute.resolved")
+            .partitions(3)
+            .replicas(1)
+            .build();
+    }
 }

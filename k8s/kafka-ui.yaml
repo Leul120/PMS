@@ -1,0 +1,86 @@
+# Kafka UI (Provectus kafka-ui)
+# A web UI for browsing Kafka topics, messages, consumer groups, and brokers.
+# Equivalent to what pgAdmin is for PostgreSQL.
+#
+# Access after deployment:
+#   kubectl port-forward svc/kafka-ui 8090:80 -n procurement
+#   Then open: http://localhost:8090
+#
+# Or via the ingress rule added in ingress.yaml at /kafka-ui
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-ui-config
+  namespace: procurement
+data:
+  # Cluster display name shown in the UI
+  KAFKA_CLUSTERS_0_NAME: "procurement-kafka"
+  # Points to Kafka broker inside the cluster
+  KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka:9092"
+  # Dynamic config via environment variables (not a static yml file)
+  DYNAMIC_CONFIG_ENABLED: "true"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: procurement
+  labels:
+    app: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+        - name: kafka-ui
+          image: provectuslabs/kafka-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: kafka-ui-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  namespace: procurement
+  labels:
+    app: kafka-ui
+spec:
+  selector:
+    app: kafka-ui
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP

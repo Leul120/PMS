@@ -1,5 +1,6 @@
 package com.procurement.deliveryinvoiceservice.config;
 
+import com.procurement.deliveryinvoiceservice.tenant.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,6 +35,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String email = tokenProvider.getEmailFromToken(jwt);
                 String role = tokenProvider.getRoleFromToken(jwt);
 
+                Long tenantId = tokenProvider.getTenantIdFromToken(jwt);
+
                 UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
                         userId,
@@ -42,13 +45,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("Authenticated user: {} with role: {}", email, role);
+
+                if (tenantId != null) {
+                    TenantContext.setCurrentTenant(tenantId);
+                }
+
+                log.debug("Authenticated user={} role={} tenant={}", email, role, tenantId);
             }
         } catch (Exception ex) {
             log.error("Could not set user authentication in security context", ex);
         }
 
-        chain.doFilter(request, response);
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

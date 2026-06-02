@@ -22,4 +22,6 @@ public class RFQRequest {
     private Long categoryId;
     
     private Integer expectedQuantity;
+
+    private Long requisitionId;
 }

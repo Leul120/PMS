@@ -66,12 +66,19 @@ export function RequirePermission({ children, permission, fallback = null }: Req
 // Get dashboard URL based on user role
 export function getDashboardByRole(role: UserRole): string {
   switch (role) {
-    case "ADMIN":    return "/dashboard/admin";
-    case "OFFICER":  return "/dashboard/officer";
-    case "MANAGER":  return "/dashboard/manager";
-    case "AUDITOR":  return "/dashboard/auditor";
-    case "VENDOR":   return "/dashboard/vendor";
-    default:         return "/dashboard";
+    case "SUPER_ADMIN": return "/";
+    case "ADMIN":       return "/dashboard/admin";
+    case "OFFICER":     return "/dashboard/officer";
+    case "MANAGER":     return "/dashboard/manager";
+    case "DIRECTOR":    return "/dashboard/director";
+    case "AUDITOR":     return "/dashboard/auditor";
+    case "VENDOR":
+    case "VENDOR_ADMIN":
+    case "VENDOR_SALES":
+    case "VENDOR_FINANCE":
+    case "VENDOR_LOGISTICS": return "/dashboard/vendor";
+    case "REQUESTER":     return "/requisitions";
+    default:            return "/";
   }
 }
 

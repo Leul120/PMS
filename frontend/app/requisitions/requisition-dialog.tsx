@@ -69,7 +69,7 @@ export function RequisitionDialog({ open, onOpenChange, onSuccess }: Requisition
           category: item.category,
         })),
       });
-      toast({ title: "Requisition created", description: "Submitted for approval." });
+      toast({ title: "Draft saved", description: "Submit it for approval when ready." });
       onSuccess();
       onOpenChange(false);
       setFormData({
@@ -92,7 +92,7 @@ export function RequisitionDialog({ open, onOpenChange, onSuccess }: Requisition
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold">New Purchase Requisition</DialogTitle>
-          <DialogDescription className="text-xs">Request a purchase — it will be sent for manager approval.</DialogDescription>
+          <DialogDescription className="text-xs">Save as draft, then submit for approval when ready.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">

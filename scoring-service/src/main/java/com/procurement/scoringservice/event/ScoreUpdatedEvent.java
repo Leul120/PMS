@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class ScoreUpdatedEvent {
+    private Long tenantId;
     private Long vendorId;
     private BigDecimal overallScore;
     private String riskLevel;

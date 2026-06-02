@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,10 @@ import reactor.core.publisher.Mono;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final JwtTokenProvider tokenProvider;
+    private final ReactiveStringRedisTemplate redisTemplate;
+
+    private static final String BLACKLIST_PREFIX = "jwt:blacklist:";
+    private static final String USER_REVOKE_PREFIX = "user:revoked:";
 
     private static final String[] PUBLIC_PATHS = {
         "/api/auth/login",
@@ -55,12 +60,62 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return unauthorized(exchange.getResponse(), "Invalid or expired token");
         }
 
-        // Token is valid. Forward the original Authorization header as-is.
-        // Each downstream service has its own JwtAuthenticationFilter that validates
-        // the token a second time and extracts userId/role into the SecurityContext.
-        // No header injection needed — services never trust headers for identity.
-        log.debug("Token validated at gateway, forwarding to downstream service");
+        String jti;
+        try {
+            jti = tokenProvider.getJtiFromToken(token);
+        } catch (Exception e) {
+            jti = null;
+        }
 
+        if (jti != null) {
+            String blacklistKey = BLACKLIST_PREFIX + jti;
+            return redisTemplate.hasKey(blacklistKey)
+                .flatMap(blacklisted -> {
+                    if (Boolean.TRUE.equals(blacklisted)) {
+                        return unauthorized(exchange.getResponse(), "Token has been invalidated");
+                    }
+                    return checkUserRevocation(exchange, chain, token);
+                })
+                .onErrorResume(e -> {
+                    log.warn("Redis blacklist check failed, allowing request: {}", e.getMessage());
+                    return checkUserRevocation(exchange, chain, token);
+                });
+        }
+
+        return checkUserRevocation(exchange, chain, token);
+    }
+
+    private Mono<Void> checkUserRevocation(ServerWebExchange exchange, GatewayFilterChain chain, String token) {
+        Long userId;
+        try { userId = tokenProvider.getUserIdFromToken(token); } catch (Exception e) { userId = null; }
+        if (userId == null) return proceedWithAuth(exchange, chain, token);
+        final Long uid = userId;
+        return redisTemplate.opsForValue().get(USER_REVOKE_PREFIX + uid)
+            .flatMap(revokedAtStr -> {
+                try {
+                    long revokedAt = Long.parseLong(revokedAtStr);
+                    java.util.Date iat = tokenProvider.getIssuedAtFromToken(token);
+                    if (iat != null && iat.getTime() < revokedAt) {
+                        return unauthorized(exchange.getResponse(), "Token has been invalidated due to password change");
+                    }
+                } catch (Exception e) {
+                    log.warn("Error parsing user revocation timestamp for userId={}: {}", uid, e.getMessage());
+                }
+                return proceedWithAuth(exchange, chain, token);
+            })
+            .switchIfEmpty(proceedWithAuth(exchange, chain, token))
+            .onErrorResume(e -> {
+                log.warn("Redis user-revocation check failed, allowing request: {}", e.getMessage());
+                return proceedWithAuth(exchange, chain, token);
+            });
+    }
+
+    private Mono<Void> proceedWithAuth(ServerWebExchange exchange, GatewayFilterChain chain, String token) {
+        Long userId = tokenProvider.getUserIdFromToken(token);
+        Long tenantId = tokenProvider.getTenantIdFromToken(token);
+        log.debug("JWT validated at gateway — userId={}, tenantId={}", userId, tenantId);
+        exchange.getAttributes().put("userId", userId);
+        exchange.getAttributes().put("tenantId", tenantId);
         return chain.filter(exchange);
     }
 

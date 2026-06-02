@@ -1,15 +1,19 @@
 package com.procurement.authservice.controller;
 
 import com.procurement.authservice.dto.*;
+import com.procurement.authservice.security.TokenBlacklistService;
 import com.procurement.authservice.service.AuthService;
 import com.procurement.authservice.service.AuditLogService;
 import com.procurement.authservice.service.PasswordResetService;
+import com.procurement.authservice.service.TenantService;
 import com.procurement.authservice.service.UserManagementService;
+import com.procurement.authservice.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +31,8 @@ public class AuthController {
     private final AuditLogService auditLogService;
     private final PasswordResetService passwordResetService;
     private final UserManagementService userManagementService;
+    private final TenantService tenantService;
+    private final TokenBlacklistService tokenBlacklistService;
     
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
@@ -40,8 +46,32 @@ public class AuthController {
     }
     
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout() {
+    public ResponseEntity<Void> logout(HttpServletRequest request) {
+        String bearer = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) {
+            tokenBlacklistService.blacklist(bearer.substring(7));
+        }
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/my-tenants")
+    public ResponseEntity<List<com.procurement.authservice.dto.TenantSummary>> getMyTenants(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(authService.getMyTenants(userId));
+    }
+
+    @PostMapping("/switch-tenant")
+    public ResponseEntity<LoginResponse> switchTenant(
+            @Valid @RequestBody com.procurement.authservice.dto.SwitchTenantRequest request,
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(authService.switchTenant(request.getTenantDomain(), userId));
+    }
+
+    @PostMapping("/switch-context")
+    public ResponseEntity<LoginResponse> switchContext(
+            @Valid @RequestBody SwitchContextRequest request,
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(authService.switchOperatingContext(userId, request.getContext()));
     }
 
     @PostMapping("/forgot-password")
@@ -68,13 +98,25 @@ public class AuthController {
     @PutMapping("/users/{userId}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long userId,
-            @RequestBody UpdateUserRequest request) {
+            @Valid @RequestBody UpdateUserRequest request) {
         return ResponseEntity.ok(authService.updateUser(userId, request));
     }
     
     @GetMapping("/users")
-    public ResponseEntity<List<UserResponse>> listUsers() {
-        return ResponseEntity.ok(authService.getAllUsers());
+    public ResponseEntity<PagedResponse<UserResponse>> listUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String accountStatus,
+            @RequestParam(required = false, defaultValue = "name-asc") String sort) {
+        return ResponseEntity.ok(userManagementService.getUsers(
+            page, size, search, role, accountStatus, null, sort));
+    }
+
+    @GetMapping("/users/stats")
+    public ResponseEntity<UserStatsResponse> getUserStats() {
+        return ResponseEntity.ok(userManagementService.getUserStats());
     }
     
     @GetMapping("/audit-logs")
@@ -99,7 +141,11 @@ public class AuthController {
     public ResponseEntity<UserResponse> assignRole(
             @PathVariable Long userId,
             @RequestBody Map<String, String> request) {
-        return ResponseEntity.ok(authService.assignRole(userId, request.get("roleName")));
+        String roleName = request.get("roleName");
+        if (roleName == null || roleName.isBlank()) {
+            throw new IllegalArgumentException("roleName is required");
+        }
+        return ResponseEntity.ok(authService.assignRole(userId, roleName));
     }
     
     @PostMapping("/admin/users/{userId}/lock")
@@ -111,10 +157,74 @@ public class AuthController {
     public ResponseEntity<Void> resetPassword(
             @PathVariable Long userId,
             @RequestBody Map<String, String> request) {
-        authService.resetPassword(userId, request.get("newPassword"));
+        String newPassword = request.get("newPassword");
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new IllegalArgumentException("newPassword must be at least 8 characters");
+        }
+        authService.resetPassword(userId, newPassword);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/my-tenant")
+    public ResponseEntity<TenantResponse> getMyTenant() {
+        Long tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(tenantService.getTenant(tenantId));
+    }
+
+    @PutMapping("/my-tenant")
+    public ResponseEntity<TenantResponse> updateMyTenant(@RequestBody Map<String, String> body) {
+        Long tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(tenantService.updateTenantName(tenantId, body.get("name")));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(
+            @RequestBody Map<String, String> request,
+            @AuthenticationPrincipal Long userId) {
+        String newPassword = request.get("newPassword");
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new IllegalArgumentException("New password must be at least 8 characters");
+        }
+        String currentPassword = request.get("currentPassword");
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new IllegalArgumentException("Current password is required");
+        }
+        authService.changePassword(userId, currentPassword, newPassword);
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully."));
+    }
     
+    // Vendor team invitation (VENDOR_ADMIN only)
+    @PostMapping("/invite")
+    public ResponseEntity<UserResponse> inviteTeamMember(
+            @Valid @RequestBody InviteRequest request,
+            @AuthenticationPrincipal Long inviterId) {
+        return ResponseEntity.ok(authService.inviteTeamMember(inviterId, request));
+    }
+
+    // Permanent deactivation (SUPER_ADMIN only — enforced by SecurityConfig /api/super-admin/**)
+    @PostMapping("/super-admin/users/{userId}/deactivate")
+    public ResponseEntity<UserResponse> deactivateUser(@PathVariable Long userId) {
+        return ResponseEntity.ok(authService.deactivateUser(userId));
+    }
+
+    // Vendor approval endpoints (super admin only — enforced at gateway level)
+    @GetMapping("/vendor-approvals")
+    public ResponseEntity<List<UserResponse>> getPendingVendorApprovals() {
+        return ResponseEntity.ok(authService.getPendingVendorApprovals());
+    }
+
+    @PostMapping("/vendor-approvals/{userId}/approve")
+    public ResponseEntity<UserResponse> approveVendor(@PathVariable Long userId) {
+        return ResponseEntity.ok(authService.approveVendor(userId));
+    }
+
+    @PostMapping("/vendor-approvals/{userId}/reject")
+    public ResponseEntity<UserResponse> rejectVendor(@PathVariable Long userId) {
+        return ResponseEntity.ok(authService.rejectVendor(userId));
+    }
+
     // Settings endpoints
     @GetMapping("/settings")
     public ResponseEntity<Map<String, Object>> getSettings() {

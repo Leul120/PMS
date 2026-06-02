@@ -254,6 +254,7 @@ public class DataInitializer implements CommandLineRunner {
                            String status, Long createdBy, BigDecimal estimatedValue,
                            Long categoryId, Integer expectedQuantity) {
         RFQ rfq = new RFQ();
+        rfq.setTenantId(1L);
         rfq.setTitle(title);
         rfq.setDescription(description);
         rfq.setDeadline(deadline);
@@ -270,6 +271,7 @@ public class DataInitializer implements CommandLineRunner {
                             LocalDateTime submittedAt, String proposalText,
                             Integer deliveryDays, BigDecimal qualityScore, BigDecimal totalScore) {
         Bid bid = new Bid();
+        bid.setTenantId(1L);
         bid.setRfqId(rfqId);
         bid.setVendorId(vendorId);
         bid.setBidAmount(bidAmount);

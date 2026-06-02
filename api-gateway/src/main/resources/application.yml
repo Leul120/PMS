@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 3000ms
   cloud:
     gateway:
       routes:
@@ -73,12 +78,31 @@ spring:
             - Path=/api/admin/**
           filters:
             - StripPrefix=0
+        - id: auth-super-admin-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/super-admin/**
+          filters:
+            - StripPrefix=0
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
+            allowedOriginPatterns:
+              - "http://localhost:3000"
+              - "http://localhost:*"
+              - "http://127.0.0.1:3000"
+              - "http://frontend:3000"
+              - "${FRONTEND_URL:http://localhost:3000}"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - Authorization
+              - Content-Type
+              - X-User-Id
             allowCredentials: true
             exposedHeaders:
               - Authorization

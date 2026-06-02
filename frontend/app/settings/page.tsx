@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,17 +11,46 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { settingsApi } from "@/lib/api";
+import { settingsApi, authApi } from "@/lib/api";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
-import { Loader2, Save, Bell, Shield, Building2, Users, CreditCard, Globe, TrendingUp } from "lucide-react";
+import { Loader2, Save, Bell, Shield, Building2, Users, CreditCard, Globe, TrendingUp, AlertTriangle } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const forcePwdChange = searchParams.get("changePassword") === "1";
+  const [activeTab, setActiveTab] = useState(forcePwdChange ? "security" : "general");
+  const changePwdRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const user = useAuthStore((state) => state.user);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canUpdateSettings = hasPermission("settings:update");
+  const hasRole = useAuthStore((state) => state.hasRole);
+  const isVendor = hasRole(["VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE"]);
+
+  // Org settings
+  const [orgName, setOrgName] = useState("");
+  const [orgDomain, setOrgDomain] = useState("");
+  const [orgPlan, setOrgPlan] = useState("");
+  const [orgUserCount, setOrgUserCount] = useState(0);
+  const [orgSaving, setOrgSaving] = useState(false);
+
+  useEffect(() => {
+    if (forcePwdChange) {
+      setTimeout(() => changePwdRef.current?.scrollIntoView({ behavior: "smooth" }), 300);
+    }
+  }, [forcePwdChange]);
+
+  useEffect(() => {
+    authApi.getMyTenant().then((t: any) => {
+      setOrgName(t.name || "");
+      setOrgDomain(t.domain || "");
+      setOrgPlan(t.subscriptionPlan || "");
+      setOrgUserCount(t.userCount || 0);
+    }).catch(() => {});
+  }, []);
 
   // General settings
   const [companyName, setCompanyName] = useState("");
@@ -44,9 +74,53 @@ export default function SettingsPage() {
 
   // Security settings
   const [twoFactor, setTwoFactor] = useState(false);
+  const [passwordPolicy, setPasswordPolicy] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState("30");
   const [passwordExpiry, setPasswordExpiry] = useState("90");
   const [loginNotifications, setLoginNotifications] = useState(true);
+
+  async function handleSaveOrg(e: React.FormEvent) {
+    e.preventDefault();
+    setOrgSaving(true);
+    try {
+      await authApi.updateMyTenant(orgName);
+      toast({ title: "Organisation name updated" });
+    } catch (err) {
+      toast({ title: "Failed to update", description: err instanceof Error ? err.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setOrgSaving(false);
+    }
+  }
+
+  // Change password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast({ title: "Password too short", description: "New password must be at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords do not match", description: "New password and confirmation must match.", variant: "destructive" });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authApi.changePassword(currentPassword, newPassword);
+      toast({ title: "Password changed", description: "Your password has been updated successfully." });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast({ title: "Failed to change password", description: err instanceof Error ? err.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setChangingPassword(false);
+    }
+  }
 
   // Scoring weights (Admin only)
   const [weightTimeliness, setWeightTimeliness] = useState("35");
@@ -119,6 +193,7 @@ export default function SettingsPage() {
       }
       if (security) {
         setTwoFactor(security.twoFactor ?? false);
+        setPasswordPolicy(security.passwordPolicy ?? true);
         setSessionTimeout(String(security.sessionTimeout || 30));
         setPasswordExpiry(String(security.passwordExpiry || 90));
         setLoginNotifications(security.loginNotifications ?? true);
@@ -136,7 +211,7 @@ export default function SettingsPage() {
       await Promise.all([
         settingsApi.updateSettings({ companyName, taxId, currency, timezone, address, city, state, zip, language, dateFormat }),
         settingsApi.updateNotifications({ email: emailNotifications, poApprovals, deliveryAlerts, vendorUpdates, lowStockAlerts, dailyDigest }),
-        settingsApi.updateSecurity({ twoFactor, sessionTimeout: parseInt(sessionTimeout), passwordExpiry: parseInt(passwordExpiry), loginNotifications }),
+        settingsApi.updateSecurity({ twoFactor, passwordPolicy, sessionTimeout: parseInt(sessionTimeout), passwordExpiry: parseInt(passwordExpiry), loginNotifications }),
       ]);
       toast({ title: "Success", description: "Settings saved successfully" });
     } catch (err) {
@@ -157,7 +232,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
     <DashboardLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -173,13 +248,14 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <Tabs defaultValue="general" className="space-y-3">
-          <TabsList className={`grid w-full ${canUpdateSettings ? "grid-cols-6 lg:w-[600px]" : "grid-cols-5 lg:w-[500px]"}`}>
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
+          <TabsList className={`grid w-full ${canUpdateSettings ? "grid-cols-7 lg:w-[700px]" : "grid-cols-6 lg:w-[600px]"}`}>
+            {!isVendor && <TabsTrigger value="general">General</TabsTrigger>}
+            {!isVendor && <TabsTrigger value="notifications">Notifications</TabsTrigger>}
             <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="organisation">Organisation</TabsTrigger>
+            {!isVendor && <TabsTrigger value="integrations">Integrations</TabsTrigger>}
+            {!isVendor && <TabsTrigger value="billing">Billing</TabsTrigger>}
             {canUpdateSettings && <TabsTrigger value="scoring">Scoring</TabsTrigger>}
           </TabsList>
           <TabsContent value="general" className="space-y-3">
@@ -335,6 +411,12 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="security" className="space-y-3">
+            {forcePwdChange && (
+              <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>Your administrator requires you to change your password before you can use the system.</span>
+              </div>
+            )}
             <div className="border border-gray-200 rounded overflow-hidden">
               <div className="flex items-center px-4 py-3 border-b border-gray-100">
                 <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
@@ -356,13 +438,103 @@ export default function SettingsPage() {
                     <Label className="text-xs">Password Policy</Label>
                     <p className="text-[11px] text-gray-500">Enforce strong password requirements</p>
                   </div>
-                  <Switch defaultChecked className="scale-90" />
+                  <Switch checked={passwordPolicy} onCheckedChange={setPasswordPolicy} className="scale-90" />
                 </div>
                 <Separator className="bg-gray-100" />
                 <div className="space-y-1.5">
                   <Label htmlFor="session" className="text-xs">Session Timeout (minutes)</Label>
                   <Input id="session" type="number" value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="h-8 text-xs border-gray-200 w-[120px]" />
                 </div>
+              </div>
+            </div>
+
+            {/* Change Password */}
+            <div ref={changePwdRef} className={`border rounded overflow-hidden ${forcePwdChange ? "border-amber-300 ring-2 ring-amber-200" : "border-gray-200"}`}>
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Change Password
+                </span>
+              </div>
+              <form onSubmit={handleChangePassword} className="p-4 space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="currentPwd" className="text-xs">Current password</Label>
+                  <Input
+                    id="currentPwd"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    className="h-8 text-xs border-gray-200 max-w-xs"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="newPwd" className="text-xs">New password</Label>
+                  <Input
+                    id="newPwd"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className="h-8 text-xs border-gray-200 max-w-xs"
+                    placeholder="Min 8 characters"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPwd" className="text-xs">Confirm new password</Label>
+                  <Input
+                    id="confirmPwd"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="h-8 text-xs border-gray-200 max-w-xs"
+                    placeholder="Repeat new password"
+                  />
+                </div>
+                <Button type="submit" size="sm" className="h-8 text-xs" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}>
+                  {changingPassword ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  Update Password
+                </Button>
+              </form>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="organisation" className="space-y-3">
+            <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Organisation Details
+                </span>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div><p className="text-gray-500">Domain</p><p className="font-medium mt-0.5 font-mono">{orgDomain}</p></div>
+                  <div><p className="text-gray-500">Subscription</p><p className="font-medium mt-0.5">{orgPlan || "—"}</p></div>
+                  <div><p className="text-gray-500">Total Users</p><p className="font-medium mt-0.5">{orgUserCount}</p></div>
+                </div>
+                <Separator className="bg-gray-100" />
+                <form onSubmit={handleSaveOrg} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="orgName" className="text-xs">Organisation name</Label>
+                    <Input
+                      id="orgName"
+                      value={orgName}
+                      onChange={(e) => setOrgName(e.target.value)}
+                      className="h-8 text-xs border-gray-200 max-w-xs"
+                      placeholder="Your company name"
+                      required
+                    />
+                    <p className="text-[10px] text-gray-400">Only the display name can be changed. Contact support to change your domain.</p>
+                  </div>
+                  <Button type="submit" size="sm" className="h-8 text-xs" disabled={orgSaving || !orgName.trim()}>
+                    {orgSaving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
+                    Save Name
+                  </Button>
+                </form>
               </div>
             </div>
           </TabsContent>

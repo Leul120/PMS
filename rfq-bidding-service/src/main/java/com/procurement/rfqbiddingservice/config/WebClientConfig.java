@@ -38,6 +38,15 @@ public class WebClientConfig {
                 .build();
     }
 
+    @Bean
+    public WebClient scoringWebClient(WebClient.Builder builder) {
+        return builder
+                .baseUrl(serviceProperties.getScoring().getUrl())
+                .clientConnector(new ReactorClientHttpConnector(
+                        createHttpClient("scoring-service")))
+                .build();
+    }
+
     private HttpClient createHttpClient(String serviceName) {
         return HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Download, TrendingUp, DollarSign, Users, ShoppingCart, Package, MoreHorizontal, ArrowUpRight, Clock, CheckCircle2, Loader2 } from "lucide-react";
@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { analyticsApi, poApi, rfqApi, vendorApi, bidApi, getVendorNameMap } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
 import { useAuthStore } from "@/lib/auth-store";
 import { getDashboardByRole } from "@/components/require-role";
 import {
@@ -61,17 +62,20 @@ function generateMonthlyData(pos: any[]) {
   return result.length > 0 ? result : [{ name: months[new Date().getMonth()], value: 0 }];
 }
 
-// Helper to generate category data from POs
-function generateCategoryData(pos: any[]) {
+// Helper to generate category data from POs via linked RFQ categories
+function generateCategoryData(pos: any[], rfqCategoryMap: Map<number, string>) {
   if (pos.length === 0) return [];
 
   const categories: Record<string, number> = {};
   pos.forEach((po) => {
-    const cat = po.category || "Other";
+    const cat = rfqCategoryMap.get(Number(po.rfqId)) || po.category || "Uncategorized";
     categories[cat] = (categories[cat] || 0) + (po.totalAmount || 0);
   });
 
-  return Object.entries(categories).map(([name, value]) => ({ name, value }));
+  return Object.entries(categories)
+    .map(([name, value]) => ({ name, value }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value);
 }
 
 interface Activity {
@@ -88,6 +92,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [vendors, setVendors] = useState<any[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [rfqCategoryMap, setRfqCategoryMap] = useState<Map<number, string>>(new Map());
   const [rfqs, setRfqs] = useState<any[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const router = useRouter();
@@ -102,16 +107,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     const role = user.role || user.roleName;
-    if (role === "VENDOR" || role === "AUDITOR") {
+    const vendorRoles = new Set(["VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE"]);
+    if (vendorRoles.has(role) || role === "AUDITOR") {
       router.replace(getDashboardByRole(role));
     }
   }, [user, router]);
 
   useEffect(() => {
-    // Don't fetch if user is being redirected away
     if (!user) return;
     const role = user.role || user.roleName;
-    if (role === "VENDOR" || role === "AUDITOR") return;
+    const vendorRoles = new Set(["VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE"]);
+    if (vendorRoles.has(role) || role === "AUDITOR") return;
     loadDashboardData();
   }, [user]);
 
@@ -160,10 +166,10 @@ export default function DashboardPage() {
       setLoading(true);
       const role = user?.role || user?.roleName;
       // VENDOR and AUDITOR are redirected away from this page; skip their API calls
-      const canReadVendors = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
-      const canReadAnalytics = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
-      const canReadPOs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
-      const canReadRFQs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR"].includes(role);
+      const canReadVendors = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "SUPER_ADMIN"].includes(role);
+      const canReadAnalytics = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "SUPER_ADMIN"].includes(role);
+      const canReadPOs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "SUPER_ADMIN"].includes(role);
+      const canReadRFQs = role && ["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "SUPER_ADMIN"].includes(role);
 
       const [overview, vendorList, poList, rfqList, vendorMap] = await Promise.all([
         canReadAnalytics ? analyticsApi.getDashboard().catch(() => null) : Promise.resolve(null),
@@ -178,7 +184,7 @@ export default function DashboardPage() {
         ...po,
         id: String(po.id || po.poId),
         poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-        vendorName: po.vendorName || vendorMap?.get(String(po.vendorId || "")) || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+        vendorName: displayVendorName(po.vendorId, { name: po.vendorName, map: vendorMap, empty: "N/A" }),
         createdAt: po.createdAt || po.issueDate,
         deliveryDate: po.deliveryDate || po.expectedDeliveryDate,
         totalAmount: Number(po.totalAmount) || 0,
@@ -188,8 +194,16 @@ export default function DashboardPage() {
       const normalisedRFQs = rfqList.map((r: any) => ({
         ...r,
         id: String(r.id || r.rfqId),
+        rfqId: r.rfqId || r.id,
         rfqNumber: r.rfqNumber || `RFQ-${String(r.rfqId || r.id).padStart(6, "0")}`,
       }));
+
+      const categoryMap = new Map<number, string>();
+      normalisedRFQs.forEach((rfq: any) => {
+        const id = Number(rfq.rfqId || rfq.id);
+        const name = rfq.categoryName || rfq.category;
+        if (id && name) categoryMap.set(id, name);
+      });
 
       // Normalise vendors
       const normalisedVendors = vendorList.map((v: any) => ({
@@ -201,6 +215,7 @@ export default function DashboardPage() {
       if (overview) setDashboardData(overview);
       setVendors(normalisedVendors);
       setPurchaseOrders(normalisedPOs);
+      setRfqCategoryMap(categoryMap);
       setRfqs(normalisedRFQs);
       setActivities(generateActivities(normalisedPOs, normalisedRFQs, normalisedVendors));
     } catch (err) {
@@ -237,6 +252,11 @@ export default function DashboardPage() {
       });
     }
   }
+
+  const categoryData = useMemo(
+    () => generateCategoryData(purchaseOrders, rfqCategoryMap),
+    [purchaseOrders, rfqCategoryMap],
+  );
 
   const metrics = [
     { label: "Total RFQs", value: dashboardData?.totalRFQs ?? rfqs.length, sub: "requests for quotation", icon: TrendingUp, loading },
@@ -319,25 +339,29 @@ export default function DashboardPage() {
               <p className="text-sm font-medium text-gray-700">Spend by Category</p>
             </div>
             <div className="p-4">
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={generateCategoryData(purchaseOrders)}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {(generateCategoryData(purchaseOrders)).map((_: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend fontSize={11} />
-                </PieChart>
-              </ResponsiveContainer>
+              {categoryData.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-16">No category spend data yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {categoryData.map((_: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, "Spend"]} />
+                    <Legend fontSize={11} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>

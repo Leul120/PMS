@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class InvoiceDiscrepancyEvent {
+    private Long tenantId;
     private Long invoiceId;
     private Long poId;
     private BigDecimal invoiceAmount;

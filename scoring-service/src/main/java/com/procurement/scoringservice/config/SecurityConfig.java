@@ -33,13 +33,14 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // POST /api/scores/calculate/** - ADMIN, OFFICER
-                .requestMatchers(HttpMethod.POST, "/api/scores/calculate/**")
-                    .hasAnyRole("ADMIN", "OFFICER")
+                // POST /api/scores/calculate/** and /recalculate-all - SUPER_ADMIN only
+                .requestMatchers(HttpMethod.POST, "/api/scores/calculate/**",
+                                 "/api/scores/recalculate-all")
+                    .hasRole("SUPER_ADMIN")
 
-                // GET /api/scores/** - ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
+                // GET /api/scores/** - vendors can read their own scores; controller filters by vendorId
                 .requestMatchers(HttpMethod.GET, "/api/scores/**")
-                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
+                    .hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
                 .anyRequest().authenticated()
             )
@@ -52,8 +53,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

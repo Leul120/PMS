@@ -9,6 +9,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/purchase-orders")
 @RequiredArgsConstructor
@@ -43,8 +45,14 @@ public class PurchaseOrderController {
     @GetMapping
     public ResponseEntity<PagedResponse<PurchaseOrderResponse>> getAllPOs(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(poService.getAllPurchaseOrders(page, size));
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String statuses,
+            @RequestParam(required = false) List<Long> vendorIds,
+            @RequestParam(required = false, defaultValue = "id-desc") String sort) {
+        return ResponseEntity.ok(poService.getAllPurchaseOrders(
+            page, size, search, status, statuses, vendorIds, sort));
     }
 
     @GetMapping("/{poId}")

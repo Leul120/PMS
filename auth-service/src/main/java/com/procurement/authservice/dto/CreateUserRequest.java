@@ -28,5 +28,11 @@ public class CreateUserRequest {
     private String phoneNumber;
     
     @NotBlank(message = "Role name is required")
-    private String roleName;  // ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR
+    private String roleName;  // ADMIN, OFFICER, MANAGER, AUDITOR, VENDOR_*
+
+    /** Optional supplier role for BOTH organisations (VENDOR_SALES, VENDOR_LOGISTICS, etc.). */
+    private String supplierRoleName;
+
+    /** SUPER_ADMIN only — target tenant for cross-tenant user creation. Ignored for other roles. */
+    private Long tenantId;
 }

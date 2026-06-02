@@ -36,27 +36,28 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // ── Deliveries ──────────────────────────────────────────────
-                .requestMatchers(HttpMethod.GET, "/api/deliveries/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.PUT, "/api/deliveries/*/status").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
-                .requestMatchers(HttpMethod.POST, "/api/deliveries").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/deliveries/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.PUT, "/api/deliveries/*/status").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.POST, "/api/deliveries").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_FINANCE")
 
                 // ── Invoices ────────────────────────────────────────────────
-                .requestMatchers(HttpMethod.GET, "/api/invoices/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/invoices/vendor/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/validate").hasAnyRole("ADMIN", "OFFICER")
-                .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/dispute").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
-                .requestMatchers(HttpMethod.POST, "/api/invoices").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
+                .requestMatchers(HttpMethod.GET, "/api/invoices/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.GET, "/api/invoices/vendor/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/validate").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/mark-paid").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/invoices/{invoiceId}/dispute").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.POST, "/api/invoices").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
                 // ── Three-Way Match ─────────────────────────────────────────
-                .requestMatchers(HttpMethod.POST, "/api/threewaymatch/validate").hasAnyRole("ADMIN", "OFFICER")
-                .requestMatchers(HttpMethod.GET, "/api/threewaymatch/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                .requestMatchers(HttpMethod.POST, "/api/threewaymatch/validate").hasAnyRole("ADMIN", "OFFICER", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/threewaymatch/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN")
 
                 // ── Disputes ────────────────────────────────────────────────
-                .requestMatchers(HttpMethod.POST, "/api/disputes/{disputeId}/resolve").hasAnyRole("ADMIN", "OFFICER", "MANAGER")
-                .requestMatchers(HttpMethod.POST, "/api/disputes").hasAnyRole("ADMIN", "OFFICER", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/disputes/{disputeId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR")
-                .requestMatchers(HttpMethod.GET, "/api/disputes/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
-                .requestMatchers(HttpMethod.GET, "/api/disputes").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR")
+                .requestMatchers(HttpMethod.POST, "/api/disputes/{disputeId}/resolve").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/disputes").hasAnyRole("ADMIN", "OFFICER", "VENDOR", "VENDOR_ADMIN", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.GET, "/api/disputes/{disputeId}").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.GET, "/api/disputes/status/**").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
+                .requestMatchers(HttpMethod.GET, "/api/disputes").hasAnyRole("ADMIN", "OFFICER", "MANAGER", "AUDITOR", "DIRECTOR", "SUPER_ADMIN", "VENDOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE")
 
                 .anyRequest().authenticated()
             )
@@ -69,8 +70,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-User-Id"));
+        configuration.setAllowCredentials(false);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

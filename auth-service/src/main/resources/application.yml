@@ -7,10 +7,12 @@ spring:
       enabled: true
   application:
     name: auth-service
+  transaction:
+    default-timeout: 30
   datasource:
-    url: jdbc:postgresql://localhost:5432/authdb
-    username: postgres
-    password: secret
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/authdb}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:secret}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -54,8 +56,8 @@ spring:
   mail:
     host: ${SMTP_HOST:smtp.gmail.com}
     port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME:leulmelkamu15@gmail.com}
-    password: ${SMTP_PASSWORD:rgsh oyvz mdbr fydw}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -70,8 +72,8 @@ jwt:
 
 logging:
   level:
-    com.procurement: DEBUG
-    org.springframework.security: DEBUG
+    com.procurement: INFO
+    org.springframework.security: WARN
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}

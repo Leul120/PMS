@@ -7,6 +7,8 @@ spring:
       enabled: true
   application:
     name: inventory-service
+  transaction:
+    default-timeout: 30
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5438/inventorydb}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -21,9 +23,17 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
     consumer:
       group-id: inventory-service-group
       auto-offset-reset: earliest
@@ -62,6 +72,6 @@ jwt:
   secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
 logging:
   level:
-    com.procurement: DEBUG
+    com.procurement: INFO
 
 

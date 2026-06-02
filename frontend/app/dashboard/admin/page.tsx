@@ -73,8 +73,11 @@ const ROLES: { value: UserRole; label: string; icon: React.ReactNode; color: str
   { value: "ADMIN", label: "Administrator", icon: <Crown className="h-4 w-4" />, color: "bg-red-100 text-red-800" },
   { value: "OFFICER", label: "Procurement Officer", icon: <Briefcase className="h-4 w-4" />, color: "bg-green-100 text-green-800" },
   { value: "MANAGER", label: "Manager", icon: <Shield className="h-4 w-4" />, color: "bg-blue-100 text-blue-800" },
+  { value: "DIRECTOR", label: "Director", icon: <Crown className="h-4 w-4" />, color: "bg-indigo-100 text-indigo-800" },
   { value: "AUDITOR", label: "Auditor", icon: <Eye className="h-4 w-4" />, color: "bg-purple-100 text-purple-800" },
-  { value: "VENDOR", label: "Vendor", icon: <Truck className="h-4 w-4" />, color: "bg-orange-100 text-orange-800" },
+  { value: "VENDOR_ADMIN", label: "Vendor Admin", icon: <Truck className="h-4 w-4" />, color: "bg-orange-100 text-orange-800" },
+  { value: "VENDOR_SALES", label: "Vendor Sales", icon: <Truck className="h-4 w-4" />, color: "bg-amber-100 text-amber-800" },
+  { value: "VENDOR_FINANCE", label: "Vendor Finance", icon: <Truck className="h-4 w-4" />, color: "bg-yellow-100 text-yellow-800" },
 ];
 
 export default function AdminDashboardPage() {
@@ -94,10 +97,10 @@ export default function AdminDashboardPage() {
   const hasRole = useAuthStore((state) => state.hasRole);
 
   const loadUsers = async () => {
-    if (!hasRole(["ADMIN"])) return;
+    if (!hasRole(["ADMIN", "SUPER_ADMIN"])) return;
     try {
       setLoading(true);
-      const data = await adminApi.getAllUsers();
+      const data = await adminApi.getAllUsersList();
       // Normalise: backend enriched UserResponse now includes active and accountLocked
       const normalised = (data as any[]).map((u: any) => ({
         ...u,
@@ -210,7 +213,7 @@ export default function AdminDashboardPage() {
   const filtered = users.filter(u => u.fullName.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <RequireRole allowedRoles={["ADMIN"]}>
+    <RequireRole allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -224,7 +227,7 @@ export default function AdminDashboardPage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-3 md:grid-cols-5 divide-x divide-gray-200 border border-gray-200 rounded">
+          <div className="grid grid-cols-3 md:grid-cols-6 divide-x divide-gray-200 border border-gray-200 rounded">
             {ROLES.map(r => {
               const count = users.filter(u => u.roleName === r.value).length;
               return (

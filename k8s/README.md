@@ -2,313 +2,365 @@
 
 ## Overview
 
-This directory contains complete Kubernetes manifests for deploying the Procurement Management System with **RS256 asymmetric JWT encryption**.
+Complete Kubernetes manifests for deploying the full ProcurePro stack: 10 microservices, 8 PostgreSQL instances, 9 Redis instances, Kafka, the Next.js frontend, Kafka UI, and the Kubernetes Dashboard.
 
-## Architecture
+## Manifest Inventory
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Ingress (Nginx)                       │
-│              Routes traffic to API Gateway                   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      API Gateway                             │
-│              Central entry point (Port 8080)                 │
-└─────────────────────────────────────────────────────────────┘
-                              │
-    ┌──────────┬──────────┬──────────┬──────────┐
-    │          │          │          │          │
-┌───▼───┐ ┌───▼───┐ ┌───▼───┐ ┌───▼───┐ ┌───▼───┐
-│ Auth  │ │Vendor │ │ RFQ   │ │ Proc  │ │Scoring│
-│ 8081  │ │ 8082  │ │ 8083  │ │ 8084  │ │ 8086  │
-└───┬───┘ └───────┘ └───────┘ └───────┘ └───────┘
-    │
-    │ Signs JWT with RSA Private Key
-    │ (Only auth-service has private key)
-    │
-    └──────────────────────┐
-                           │
-    ┌──────────────────────▼──────────────────────┐
-    │          All Other Services                 │
-    │     Verify JWT with RSA Public Key          │
-    │  (Public key mounted via K8s Secret)        │
-    └─────────────────────────────────────────────┘
+k8s/
+├── namespace.yaml               Procurement namespace
+├── secrets.yaml                 JWT RSA keys, DB passwords
+├── configmap.yaml               Service URLs, Kafka config, app settings
+│
+├── redis.yaml                   Shared Redis (api-gateway rate limiting)
+├── redis-services.yaml          9 per-service Redis instances
+│
+├── postgres-auth.yaml           authdb        (auth-service)
+├── postgres-vendor.yaml         vendordb      (vendor-service)
+├── postgres-rfq.yaml            rfqdb         (rfq-bidding-service)
+├── postgres-procurement.yaml    procurementdb (procurement-service)
+├── postgres-delivery.yaml       deliverydb    (delivery-invoice-service)
+├── postgres-scoring.yaml        scoringdb     (scoring-service)
+├── postgres-inventory.yaml      inventorydb   (inventory-service)
+├── postgres-notification.yaml   notificationdb (notification-service)
+│
+├── kafka.yaml                   Kafka + Zookeeper
+│
+├── auth-service.yaml            :8081  (holds RSA private key)
+├── vendor-service.yaml          :8082
+├── rfq-bidding-service.yaml     :8083
+├── procurement-service.yaml     :8084
+├── delivery-invoice-service.yaml :8085
+├── scoring-service.yaml         :8086
+├── analytics-service.yaml       :8087  (Redis-only, no DB)
+├── inventory-service.yaml       :8088
+├── notification-service.yaml    :8089
+├── api-gateway.yaml             :8080
+├── frontend.yaml                :3000
+│
+├── kafka-ui.yaml                Kafka web UI (provectuslabs/kafka-ui)
+├── kubernetes-dashboard.yaml    Kubernetes web UI
+│
+├── metallb.yaml                 MetalLB load balancer config
+├── ingress.yaml                 NGINX Ingress routing rules
+└── kustomization.yaml           Kustomize entrypoint (apply everything with one command)
 ```
 
-## Security Model: RS256 Asymmetric Encryption
+---
 
-### Why RS256?
+## Security Model: RS256 Asymmetric JWT
 
-| Feature | HS256 (Symmetric) | RS256 (Asymmetric) |
-|---------|-------------------|-------------------|
-| Key Distribution | Same secret to ALL services | Private key stays in auth-service only |
-| Compromise Risk | All services compromised if secret leaks | Only auth-service can sign tokens |
-| Service Verification | Any service can forge tokens | Only auth-service can create valid tokens |
-| Key Rotation | Must update ALL services | Only rotate auth-service keys |
+The Kubernetes deployment uses RSA-256 instead of the HMAC-SHA256 used in Docker Compose. The difference:
 
-### Implementation
+| | HS256 (Docker Compose) | RS256 (Kubernetes) |
+|---|---|---|
+| Key type | One shared secret | RSA key pair |
+| Who can sign | Any service that has the secret | Only auth-service (holds private key) |
+| Who can verify | Any service | Any service (public key is safe to share) |
+| Risk if a service is compromised | Attacker can forge tokens for any user | Attacker can only read tokens, not forge them |
 
-1. **Auth Service**: Signs JWT with RSA Private Key (kept secret)
-2. **All Other Services**: Verify JWT with RSA Public Key (shared safely)
-3. **Key Distribution**: Via Kubernetes Secrets mounted as files
-4. **JWKS Endpoint**: `/.well-known/jwks.json` for dynamic key rotation
+**Implementation:**
+- `auth-service` mounts the **RSA private key** via K8s Secret → signs JWTs.
+- All other services mount only the **RSA public key** → can verify but never forge.
+
+---
 
 ## Prerequisites
 
-- Kubernetes cluster (v1.24+)
-- kubectl configured
-- NGINX Ingress Controller installed
-- Storage provisioner (for PostgreSQL PVCs)
+- Kubernetes cluster v1.24+
+- `kubectl` configured
+- NGINX Ingress Controller installed (`kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/...`)
+- A storage provisioner for PVCs (built-in in most managed clusters; use `local-path-provisioner` for bare-metal)
+- MetalLB for bare-metal LoadBalancer support (already included in `metallb.yaml`)
 
-## Generate RSA Keys
+---
+
+## Step 1 — Generate RSA Keys
 
 ```bash
-# Generate 2048-bit RSA private key
+# Generate RSA private key
 openssl genrsa -out jwt-private.pem 2048
 
 # Extract public key
 openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
 
-# Base64 encode for Kubernetes Secret (remove headers)
-openssl base64 -A -in jwt-private.pem > jwt-private.b64
-openssl base64 -A -in jwt-public.pem > jwt-public.b64
-
-# Update secrets.yaml with the base64-encoded keys
-cat jwt-private.b64
-cat jwt-public.b64
+# Print base64 values to paste into secrets.yaml
+echo "Private key:"; cat jwt-private.pem
+echo "Public key:";  cat jwt-public.pem
 ```
 
-## Deployment
+Edit `secrets.yaml` and replace the placeholder RSA key blocks with your generated keys.
 
-### Option 1: Using kubectl
+Also change all `secret` password values in `secrets.yaml` before deploying to any non-local environment.
+
+---
+
+## Step 2 — Deploy
+
+### Option A: Kustomize (recommended — deploys everything in one command)
 
 ```bash
-# Apply all manifests
-kubectl apply -f namespace.yaml
-kubectl apply -f secrets.yaml
-kubectl apply -f configmap.yaml
-
-# Deploy databases
-kubectl apply -f postgres-auth.yaml
-kubectl apply -f postgres-vendor.yaml
-kubectl apply -f postgres-rfq.yaml
-kubectl apply -f postgres-procurement.yaml
-kubectl apply -f postgres-delivery.yaml
-kubectl apply -f postgres-scoring.yaml
-
-# Deploy infrastructure
-kubectl apply -f kafka.yaml
-
-# Deploy microservices
-kubectl apply -f auth-service.yaml
-kubectl apply -f vendor-service.yaml
-kubectl apply -f rfq-bidding-service.yaml
-kubectl apply -f procurement-service.yaml
-kubectl apply -f delivery-invoice-service.yaml
-kubectl apply -f scoring-service.yaml
-kubectl apply -f analytics-service.yaml
-kubectl apply -f notification-service.yaml
-kubectl apply -f api-gateway.yaml
-
-# Deploy ingress
-kubectl apply -f ingress.yaml
+kubectl apply -k k8s/
 ```
 
-### Option 2: Using Kustomize (Recommended)
+Kustomize applies all resources in dependency order. Wait ~3 minutes for all pods to reach `Running` state.
+
+### Option B: Manual order (if debugging a specific layer)
 
 ```bash
-# Deploy everything at once
-kubectl apply -k .
+# 1. Foundation
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -f k8s/configmap.yaml
 
-# Or with kubectl 1.14+
-kubectl apply -k https://github.com/your-repo/procurement-system/k8s
+# 2. Storage
+kubectl apply -f k8s/redis.yaml
+kubectl apply -f k8s/redis-services.yaml
+kubectl apply -f k8s/postgres-auth.yaml
+kubectl apply -f k8s/postgres-vendor.yaml
+kubectl apply -f k8s/postgres-rfq.yaml
+kubectl apply -f k8s/postgres-procurement.yaml
+kubectl apply -f k8s/postgres-delivery.yaml
+kubectl apply -f k8s/postgres-scoring.yaml
+kubectl apply -f k8s/postgres-inventory.yaml
+kubectl apply -f k8s/postgres-notification.yaml
+kubectl apply -f k8s/kafka.yaml
+
+# 3. Services (wait for DB pods to be Ready first)
+kubectl apply -f k8s/auth-service.yaml
+kubectl apply -f k8s/vendor-service.yaml
+kubectl apply -f k8s/rfq-bidding-service.yaml
+kubectl apply -f k8s/procurement-service.yaml
+kubectl apply -f k8s/delivery-invoice-service.yaml
+kubectl apply -f k8s/scoring-service.yaml
+kubectl apply -f k8s/analytics-service.yaml
+kubectl apply -f k8s/inventory-service.yaml
+kubectl apply -f k8s/notification-service.yaml
+kubectl apply -f k8s/api-gateway.yaml
+kubectl apply -f k8s/frontend.yaml
+
+# 4. Tooling & Networking
+kubectl apply -f k8s/kafka-ui.yaml
+kubectl apply -f k8s/metallb.yaml
+kubectl apply -f k8s/ingress.yaml
 ```
 
-### Option 3: Using Helm (Future Enhancement)
+---
+
+## Step 3 — Verify
 
 ```bash
-# Package as Helm chart
-helm package ./k8s
-
-# Install
-helm install procurement ./procurement-chart
-```
-
-## Verification
-
-```bash
-# Check all pods are running
+# All pods should be Running (takes ~2-3 min)
 kubectl get pods -n procurement
 
 # Check services
 kubectl get svc -n procurement
 
-# Check ingress
+# Check ingress routes
 kubectl get ingress -n procurement
 
-# View logs for a specific service
+# Tail logs for a specific service
 kubectl logs -f deployment/auth-service -n procurement
 
-# Port forward for local testing
-kubectl port-forward svc/api-gateway 8080:80 -n procurement
+# Describe a crashing pod
+kubectl describe pod <pod-name> -n procurement
 ```
 
-## Accessing the Application
+---
 
-### Local (with port-forward)
+## Accessing the Applications
+
+### Add to `/etc/hosts` (for local cluster)
+
+```
+127.0.0.1  procurement.local
+```
+
+### Application URLs
+
+| Application | URL | Notes |
+|---|---|---|
+| **Frontend** | http://procurement.local | Main web UI |
+| **API Gateway** | http://procurement.local/api | All backend API calls |
+| **Kafka UI** | http://procurement.local/kafka-ui | Browse topics, messages, consumers |
+| **Kubernetes Dashboard** | https://\<node-ip\>:30443 | Pod/deployment management |
+
+### Port-forward for local testing (no Ingress needed)
+
 ```bash
-kubectl port-forward svc/api-gateway 8080:80 -n procurement
-curl http://localhost:8080/api/auth/login
+# Frontend
+kubectl port-forward svc/frontend 3000:3000 -n procurement
+
+# API Gateway
+kubectl port-forward svc/api-gateway 8080:8080 -n procurement
+
+# Kafka UI
+kubectl port-forward svc/kafka-ui 8090:80 -n procurement
+# → open http://localhost:8090
+
+# Kubernetes Dashboard
+kubectl port-forward svc/kubernetes-dashboard 8443:443 -n kubernetes-dashboard
+# → open https://localhost:8443
 ```
 
-### With Ingress
-Add to `/etc/hosts`:
+---
+
+## Kafka UI
+
+Kafka UI (by Provectus) gives you a browser-based view of:
+- All topics and their message counts
+- Browse individual messages (with JSON formatting)
+- Consumer groups and their lag
+- Broker and cluster health
+
+**Deploy:**
+```bash
+kubectl apply -f k8s/kafka-ui.yaml
 ```
-127.0.0.1 api.procurement.local
+
+**Access:**
+```bash
+kubectl port-forward svc/kafka-ui 8090:80 -n procurement
+# open http://localhost:8090
 ```
 
-Then access:
+**Topics you'll see:**
+- `vendor.verified`, `rfq.published`, `bid.submitted`
+- `po.approved`, `delivery.completed`, `invoice.discrepancy`
+- `score.updated`
+- Dead-letter topics: `<topic>-dlt` (appear after first consumer failure)
+
+---
+
+## Kubernetes Dashboard
+
+The dashboard (deployed to its own `kubernetes-dashboard` namespace) gives you a browser-based view of:
+- All pods, deployments, services, and ingresses
+- Real-time CPU and memory usage per pod
+- Container logs (same as `kubectl logs`)
+- Exec into containers (same as `kubectl exec -it`)
+- Apply/edit YAML resources in-browser
+
+**Deploy:**
+```bash
+kubectl apply -f k8s/kubernetes-dashboard.yaml
 ```
-https://api.procurement.local/api/auth/login
+
+**Get a login token:**
+```bash
+kubectl -n kubernetes-dashboard create token admin-user
+# Copy the printed token — paste it into the dashboard login screen
 ```
 
-## Key Kubernetes Resources
+**Access via NodePort (always available):**
+```
+https://<node-ip>:30443
+```
 
-### Secrets (`secrets.yaml`)
-- `jwt-keys`: RSA private/public keys
-- `db-credentials`: PostgreSQL passwords
-- `kafka-credentials`: Kafka authentication (if enabled)
+**Access via port-forward:**
+```bash
+kubectl port-forward svc/kubernetes-dashboard 8443:443 -n kubernetes-dashboard
+# open https://localhost:8443 (accept the self-signed cert warning)
+```
 
-### ConfigMap (`configmap.yaml`)
-- Service URLs for inter-service communication
-- Kafka configuration
-- JWT settings
-- Application properties
+> **Note:** The `admin-user` ServiceAccount has `cluster-admin` access — full read/write on the entire cluster. For a shared or production cluster, create a namespace-scoped Role instead.
 
-### Deployments
-Each microservice has:
-- **2 replicas** for high availability
-- **Resource limits** (CPU/Memory)
-- **Health checks** (liveness/readiness probes)
-- **JWT public key** mounted as volume
-- **Environment variables** from ConfigMap and Secrets
-
-### Services
-- **ClusterIP** for internal communication
-- Headless services for databases
-
-### PersistentVolumeClaims
-- 5Gi storage for each PostgreSQL instance
+---
 
 ## Scaling
 
 ```bash
-# Scale a specific service
+# Scale a single service
 kubectl scale deployment vendor-service --replicas=3 -n procurement
 
-# Horizontal Pod Autoscaler (HPA) example
+# Horizontal Pod Autoscaler (CPU-based)
 kubectl autoscale deployment auth-service --min=2 --max=5 --cpu-percent=70 -n procurement
+
+# Check HPA status
+kubectl get hpa -n procurement
 ```
 
-## Updates
+---
+
+## Rolling Updates
 
 ```bash
-# Rolling update for a service
-kubectl set image deployment/auth-service auth-service=procurement/auth-service:v2.0 -n procurement
+# Update to a new image tag
+kubectl set image deployment/auth-service \
+  auth-service=procurement/auth-service:v2 -n procurement
 
-# Check rollout status
+# Watch the rollout
 kubectl rollout status deployment/auth-service -n procurement
 
-# Rollback if needed
+# Rollback
 kubectl rollout undo deployment/auth-service -n procurement
 ```
 
-## Monitoring
-
-### Recommended Tools
-- **Prometheus** + **Grafana** for metrics
-- **ELK Stack** (Elasticsearch, Logstash, Kibana) for logs
-- **Jaeger** for distributed tracing
-
-### Example ServiceMonitor for Prometheus
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: procurement-metrics
-  namespace: procurement
-spec:
-  selector:
-    matchLabels:
-      app: auth-service
-  endpoints:
-    - port: metrics
-      path: /actuator/prometheus
-```
+---
 
 ## Troubleshooting
 
-### Pod not starting
+**Pod stuck in `Pending`:**
 ```bash
 kubectl describe pod <pod-name> -n procurement
-kubectl logs <pod-name> -n procurement --previous
+# Common cause: no PVC storage available → check your storage provisioner
 ```
 
-### Service not reachable
+**Pod in `CrashLoopBackOff`:**
+```bash
+kubectl logs <pod-name> -n procurement --previous
+# Common causes: DB not ready yet (wait), wrong DB URL, missing secret
+```
+
+**Service unreachable:**
 ```bash
 kubectl get endpoints -n procurement
-kubectl exec -it <pod-name> -n procurement -- nslookup <service-name>
+# If endpoint list is empty, the pod selector labels don't match the service selector
+
+kubectl exec -it deployment/api-gateway -n procurement -- nslookup auth-service
+# Tests internal DNS resolution
 ```
 
-### JWT validation failing
+**JWT validation failing on non-auth services:**
 ```bash
-# Check if public key is mounted correctly
-kubectl exec -it deployment/vendor-service -n procurement -- cat /etc/jwt-keys/jwt-public.key
-
-# Check auth-service public key endpoint
-curl http://auth-service:8081/.well-known/public-key
+# Check the public key is mounted
+kubectl exec -it deployment/vendor-service -n procurement \
+  -- cat /etc/jwt-keys/jwt-public.pem
 ```
 
-## Security Best Practices
+**Kafka consumer not processing events:**
+```bash
+# Check consumer group lag in Kafka UI or via CLI:
+kubectl exec -it deployment/kafka -n procurement \
+  -- kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+     --group notification-service-group --describe
+# Look for LAG > 0 — means messages are queued but not processed
+```
 
-1. **Use Network Policies** - Restrict pod-to-pod communication
-2. **Pod Security Policies** - Run containers as non-root
-3. **RBAC** - Limit service account permissions
-4. **Secrets Management** - Use external secret management (Vault, AWS Secrets Manager)
-5. **mTLS** - Enable mutual TLS between services (Istio/Linkerd)
-6. **Image Scanning** - Scan images for vulnerabilities before deployment
-7. **Resource Quotas** - Prevent resource exhaustion attacks
+---
+
+## Security Checklist Before Production
+
+- [ ] Replace all `secret` passwords in `secrets.yaml` with strong random values
+- [ ] Replace RSA key placeholders with real generated keys
+- [ ] Enable HTTPS on Ingress (`tls` block in `ingress.yaml` + a real TLS cert via cert-manager)
+- [ ] Set `SMTP_USERNAME` and `SMTP_PASSWORD` secrets for email notifications
+- [ ] Set `FRONTEND_URL` in `configmap.yaml` to your real domain
+- [ ] Restrict Kubernetes Dashboard ServiceAccount to namespace-scoped Role
+- [ ] Enable NetworkPolicies to restrict pod-to-pod traffic
+- [ ] Set `imagePullPolicy: Always` and use specific image tags instead of `latest`
+
+---
 
 ## Cleanup
 
 ```bash
-# Delete all resources
+# Remove all procurement resources (keeps kubernetes-dashboard)
 kubectl delete namespace procurement
 
-# Or delete specific resources
-kubectl delete -k .
-```
+# Remove Kubernetes Dashboard
+kubectl delete namespace kubernetes-dashboard
 
-## Directory Structure
-
-```
-k8s/
-├── README.md                    # This file
-├── kustomization.yaml           # Kustomize configuration
-├── namespace.yaml               # Namespace definition
-├── secrets.yaml                 # Kubernetes Secrets
-├── configmap.yaml               # Configuration
-├── postgres-*.yaml              # 6 PostgreSQL StatefulSets
-├── kafka.yaml                   # Kafka + Zookeeper
-├── auth-service.yaml            # Auth service (with private key)
-├── vendor-service.yaml          # Vendor service (public key only)
-├── rfq-bidding-service.yaml     # RFQ service (public key only)
-├── procurement-service.yaml     # Procurement service
-├── delivery-invoice-service.yaml # Delivery service
-├── scoring-service.yaml         # Scoring service
-├── analytics-service.yaml       # Analytics service
-├── notification-service.yaml    # Notification service
-├── api-gateway.yaml             # API Gateway
-└── ingress.yaml                 # NGINX Ingress rules
+# Or remove everything applied by kustomize
+kubectl delete -k k8s/
 ```

@@ -20,13 +20,20 @@ spec:
           image: procurement/notification-service:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8088
+            - containerPort: 8089
           envFrom:
             - configMapRef:
                 name: app-config
           env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-notification:5432/notificationdb"
             - name: SPRING_DATA_REDIS_HOST
               value: "redis-notification"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: notification-db-password
             - name: JWT_PUBLIC_KEY_PATH
               value: "file:/etc/jwt-keys/jwt-public.key"
           volumeMounts:
@@ -43,13 +50,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8088
+              port: 8089
             initialDelaySeconds: 60
             periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8088
+              port: 8089
             initialDelaySeconds: 30
             periodSeconds: 10
       volumes:
@@ -67,6 +74,6 @@ spec:
   selector:
     app: notification-service
   ports:
-    - port: 8088
-      targetPort: 8088
+    - port: 8089
+      targetPort: 8089
   type: ClusterIP

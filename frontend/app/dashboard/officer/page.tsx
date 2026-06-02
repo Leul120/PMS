@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { RequireRole } from "@/components/require-role";
 import { rfqApi, vendorApi, poApi, bidApi, getVendorNameMap, getCategoryNameMap } from "@/lib/api";
+import { displayVendorName } from "@/lib/display";
 import { useAuthStore } from "@/lib/auth-store";
 import Link from "next/link";
 import {
@@ -52,7 +53,7 @@ export default function OfficerDashboardPage() {
   const hasRole = useAuthStore((state) => state.hasRole);
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER"])) return;
+    if (!hasRole(["ADMIN", "OFFICER", "SUPER_ADMIN"])) return;
     async function load() {
       try {
         setLoading(true);
@@ -101,7 +102,7 @@ export default function OfficerDashboardPage() {
           pending.slice(0, 5).map((po: any) => ({
             id: String(po.id || po.poId),
             poNumber: po.poNumber || `PO-${String(po.poId || po.id).padStart(6, "0")}`,
-            vendorName: po.vendorName || vendorMap?.get(String(po.vendorId || "")) || (po.vendorId ? `Vendor #${po.vendorId}` : "N/A"),
+            vendorName: displayVendorName(po.vendorId, { name: po.vendorName, map: vendorMap, empty: "N/A" }),
             totalAmount: Number(po.totalAmount) || 0,
             status: po.status,
             createdAt: po.createdAt || po.issueDate,
@@ -124,7 +125,7 @@ export default function OfficerDashboardPage() {
   ];
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -139,14 +140,14 @@ export default function OfficerDashboardPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200 border border-gray-200 rounded">
-            {statCards.map(({ label, value, icon: Icon }) => (
-              <div key={label} className="px-4 py-3 flex items-center gap-3">
+            {statCards.map(({ label, value, icon: Icon, href }) => (
+              <Link key={label} href={href} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
                 <Icon className="h-4 w-4 text-gray-400 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
                   {loading ? <div className="h-5 w-10 bg-gray-100 rounded animate-pulse mt-0.5" /> : <p className="text-xl font-semibold text-gray-900 mt-0.5">{value}</p>}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 

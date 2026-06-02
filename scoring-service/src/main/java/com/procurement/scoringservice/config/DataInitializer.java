@@ -60,6 +60,7 @@ public class DataInitializer implements CommandLineRunner {
     private void createWeights(String category, String timeliness, String quality,
                                 String cost, String responsiveness, String updatedBy) {
         ScoringWeights w = new ScoringWeights();
+        w.setTenantId(1L);
         w.setCategory(category);
         w.setTimelinessWeight(new BigDecimal(timeliness));
         w.setQualityWeight(new BigDecimal(quality));
@@ -114,6 +115,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private void createScore(Long vendorId, String metric, String score, String riskLevel) {
         VendorScore vs = new VendorScore();
+        vs.setTenantId(1L);
         vs.setVendorId(vendorId);
         vs.setPerformanceMetric(metric);
         vs.setWeightedScore(new BigDecimal(score));
@@ -181,6 +183,7 @@ public class DataInitializer implements CommandLineRunner {
     private void createPerf(Long vendorId, int reliability, int quality,
                              int cost, int responsiveness, LocalDate date) {
         VendorPerformanceRecord r = new VendorPerformanceRecord();
+        r.setTenantId(1L);
         r.setVendorId(vendorId);
         r.setReliabilityScore(reliability);
         r.setQualityScore(quality);
@@ -232,6 +235,7 @@ public class DataInitializer implements CommandLineRunner {
                                   String finalScore, String riskLevel,
                                   LocalDateTime calculatedAt, String period) {
         VendorCompositeScore cs = new VendorCompositeScore();
+        cs.setTenantId(1L);
         cs.setVendorId(vendorId);
         cs.setTimelinessScore(new BigDecimal(timeliness));
         cs.setQualityScore(new BigDecimal(quality));

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 @Slf4j
@@ -29,19 +30,34 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(Long userId, String email, String roleName, String permissions) {
+    public String generateToken(Long userId, String email, String roleName, String permissions, Long tenantId) {
+        return generateToken(userId, email, roleName, permissions, tenantId, null);
+    }
+
+    public String generateToken(Long userId, String email, String roleName, String permissions,
+                              Long tenantId, String operatingContext) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("role", roleName)
                 .claim("permissions", permissions)
+                .claim("tenantId", tenantId);
+        if (operatingContext != null && !operatingContext.isBlank()) {
+            builder.claim("operatingContext", operatingContext);
+        }
+        return builder
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    public String getOperatingContextFromToken(String token) {
+        return parseToken(token).get("operatingContext", String.class);
     }
 
     public Long getUserIdFromToken(String token) {
@@ -54,6 +70,30 @@ public class JwtTokenProvider {
 
     public String getRoleFromToken(String token) {
         return parseToken(token).get("role", String.class);
+    }
+
+    public Long getTenantIdFromToken(String token) {
+        Object tenantId = parseToken(token).get("tenantId");
+        if (tenantId == null) return null;
+        if (tenantId instanceof Long l) return l;
+        if (tenantId instanceof Integer i) return i.longValue();
+        return Long.parseLong(tenantId.toString());
+    }
+
+    public String getJtiFromToken(String token) {
+        return parseToken(token).getId();
+    }
+
+    public Date getExpirationDateFromToken(String token) {
+        return parseToken(token).getExpiration();
+    }
+
+    public Date getIssuedAtFromToken(String token) {
+        return parseToken(token).getIssuedAt();
+    }
+
+    public Long getUserIdFromTokenQuiet(String token) {
+        try { return getUserIdFromToken(token); } catch (Exception e) { return null; }
     }
 
     public boolean validateToken(String token) {

@@ -1,19 +1,27 @@
 package com.procurement.inventoryservice.service;
 
+import com.procurement.inventoryservice.dto.InventoryFilterOptionsResponse;
 import com.procurement.inventoryservice.dto.InventoryItemRequest;
+import com.procurement.inventoryservice.dto.InventoryStatsResponse;
+import com.procurement.inventoryservice.dto.InventoryStockStatus;
 import com.procurement.inventoryservice.dto.PagedResponse;
 import com.procurement.inventoryservice.entity.InventoryItem;
 import com.procurement.inventoryservice.repository.InventoryRepository;
+import com.procurement.inventoryservice.repository.InventorySpecifications;
+import com.procurement.inventoryservice.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.retrytopic.TopicSuffixingStrategy;
 import org.springframework.retry.annotation.Backoff;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,15 +34,69 @@ import java.util.Map;
 public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public PagedResponse<InventoryItem> getAllItems(int page, int size) {
+    @Transactional(readOnly = true)
+    public PagedResponse<InventoryItem> getAllItems(
+            int page,
+            int size,
+            String search,
+            String category,
+            String location,
+            InventoryStockStatus stockStatus,
+            String sort) {
+        Specification<InventoryItem> spec = InventorySpecifications.combine(
+            search, category, location, stockStatus);
         Page<InventoryItem> p = inventoryRepository.findAll(
-            PageRequest.of(page, size, Sort.unsorted()));
+            spec,
+            PageRequest.of(page, size, resolveSort(sort)));
         return PagedResponse.<InventoryItem>builder()
             .content(p.getContent()).page(p.getNumber()).size(p.getSize())
             .totalElements(p.getTotalElements()).totalPages(p.getTotalPages()).last(p.isLast()).build();
     }
 
+    @Transactional(readOnly = true)
+    public InventoryStatsResponse getStats() {
+        Object[] row = inventoryRepository.aggregateStats();
+        long productCount = row[0] != null ? ((Number) row[0]).longValue() : 0;
+        long totalUnits = row[1] != null ? ((Number) row[1]).longValue() : 0;
+        long outOfStock = row[2] != null ? ((Number) row[2]).longValue() : 0;
+        long lowStock = row[3] != null ? ((Number) row[3]).longValue() : 0;
+        long inStock = row[4] != null ? ((Number) row[4]).longValue() : 0;
+        long overMax = row[5] != null ? ((Number) row[5]).longValue() : 0;
+        return InventoryStatsResponse.builder()
+            .productCount(productCount)
+            .totalUnits(totalUnits)
+            .inStock(inStock)
+            .lowStock(lowStock)
+            .outOfStock(outOfStock)
+            .overMax(overMax)
+            .build();
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryFilterOptionsResponse getFilterOptions() {
+        return InventoryFilterOptionsResponse.builder()
+            .categories(inventoryRepository.findDistinctCategories())
+            .locations(inventoryRepository.findDistinctLocations())
+            .build();
+    }
+
+    private Sort resolveSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return Sort.by(Sort.Direction.ASC, "name");
+        }
+        return switch (sort) {
+            case "name-desc" -> Sort.by(Sort.Direction.DESC, "name");
+            case "qty-asc" -> Sort.by(Sort.Direction.ASC, "quantity");
+            case "qty-desc" -> Sort.by(Sort.Direction.DESC, "quantity");
+            case "sku-asc" -> Sort.by(Sort.Direction.ASC, "itemCode");
+            case "updated-desc" -> Sort.by(Sort.Direction.DESC, "updatedAt");
+            default -> Sort.by(Sort.Direction.ASC, "name");
+        };
+    }
+
+    @Transactional(readOnly = true)
     public InventoryItem getItemById(Long id) {
         return inventoryRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Item not found: " + id));
@@ -46,6 +108,11 @@ public class InventoryService {
             throw new RuntimeException("Item code already exists: " + request.getItemCode());
         }
         InventoryItem item = new InventoryItem();
+        Long tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null) {
+            throw new IllegalStateException("Tenant context is required. Ensure request is authenticated.");
+        }
+        item.setTenantId(tenantId);
         item.setItemCode(request.getItemCode());
         item.setName(request.getName());
         item.setDescription(request.getDescription());
@@ -92,17 +159,32 @@ public class InventoryService {
         return saved;
     }
 
-    /**
-     * Uses a database-level query — avoids loading all items into memory.
-     * Returns items where quantity <= minStock.
-     */
+    @Transactional(readOnly = true)
     public List<InventoryItem> getLowStockItems() {
-        // findByQuantityLessThanEqual compares against a fixed threshold;
-        // we need quantity <= minStock which varies per item, so we use a stream filter
-        // on the DB-paged result. For large datasets, a @Query with a JOIN condition is preferred.
-        return inventoryRepository.findAll().stream()
-            .filter(item -> item.getQuantity() <= item.getMinStock())
-            .toList();
+        return inventoryRepository.findLowStockItems();
+    }
+
+    /** Runs every hour and publishes a Kafka event for each low-stock item. */
+    @Scheduled(fixedRateString = "${inventory.low-stock-check-ms:3600000}")
+    @Transactional(readOnly = true)
+    public void scheduledLowStockCheck() {
+        List<InventoryItem> lowItems = inventoryRepository.findLowStockItems();
+        if (lowItems.isEmpty()) return;
+        log.info("Low stock check: {} item(s) need attention", lowItems.size());
+        for (InventoryItem item : lowItems) {
+            try {
+                kafkaTemplate.send("inventory.low-stock", Map.of(
+                    "itemId", item.getId(),
+                    "itemCode", item.getItemCode(),
+                    "name", item.getName(),
+                    "quantity", item.getQuantity(),
+                    "minStock", item.getMinStock(),
+                    "status", item.getStatus()
+                ));
+            } catch (Exception e) {
+                log.warn("Failed to publish low-stock event for {}: {}", item.getItemCode(), e.getMessage());
+            }
+        }
     }
 
     // ── Kafka listeners ───────────────────────────────────────────────────────
@@ -152,11 +234,23 @@ public class InventoryService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void checkLowStockAlert(InventoryItem item) {
-        if (item.getQuantity() <= 0) {
-            log.warn("CRITICAL STOCK: {} ({}) is out of stock!", item.getName(), item.getItemCode());
-        } else if (item.getQuantity() <= item.getMinStock()) {
-            log.warn("LOW STOCK: {} ({}) has {} units (min: {})",
-                item.getName(), item.getItemCode(), item.getQuantity(), item.getMinStock());
+        if (item.getQuantity() <= item.getMinStock()) {
+            String level = item.getQuantity() <= 0 ? "critical" : "low";
+            log.warn("{} STOCK: {} ({}) has {} units (min: {})",
+                level.toUpperCase(), item.getName(), item.getItemCode(), item.getQuantity(), item.getMinStock());
+            try {
+                java.util.HashMap<String, Object> payload = new java.util.HashMap<>();
+                payload.put("itemId", item.getId());
+                payload.put("itemCode", item.getItemCode());
+                payload.put("name", item.getName());
+                payload.put("quantity", item.getQuantity());
+                payload.put("minStock", item.getMinStock());
+                payload.put("status", level);
+                payload.put("tenantId", item.getTenantId());
+                kafkaTemplate.send("inventory.low-stock", payload);
+            } catch (Exception e) {
+                log.warn("Failed to publish low-stock event for {}: {}", item.getItemCode(), e.getMessage());
+            }
         }
     }
 

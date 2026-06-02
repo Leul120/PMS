@@ -12,7 +12,7 @@ import {
   PieChart, Pie, Cell, Legend, AreaChart, Area
 } from "recharts";
 import { Download, Loader2, DollarSign, TrendingUp, ShoppingCart, Users } from "lucide-react";
-import { poApi, vendorApi, getVendorNameMap, rfqApi } from "@/lib/api";
+import { poApi, vendorApi, getVendorNameMap, rfqApi, analyticsApi } from "@/lib/api";
 import { RequireRole } from "@/components/require-role";
 import { useAuthStore } from "@/lib/auth-store";
 
@@ -95,24 +95,31 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>("6m");
+  const [serverStats, setServerStats] = useState<any>(null);
   const hasRole = useAuthStore((state) => state.hasRole);
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"])) {
       setLoading(false);
       return;
     }
     async function load() {
       try {
-        const [pos, vendors, vMap, rfqs] = await Promise.all([
+        // Load server-aggregated stats and raw data in parallel
+        const [pos, vendors, vMap, rfqs, overview, spendReport] = await Promise.all([
           poApi.getAllList().catch(() => []),
           vendorApi.getAllList().catch(() => []),
           getVendorNameMap(),
           rfqApi.getAllList().catch(() => []),
+          analyticsApi.getDashboard().catch(() => null),
+          analyticsApi.getSpendReport().catch(() => null),
         ]);
         setAllPos(pos as any[]);
         setAllVendors(vendors as any[]);
         setVendorMap(vMap);
+        if (overview || spendReport) {
+          setServerStats({ ...overview, ...spendReport });
+        }
 
         const rfqMap = new Map<number, string>();
         (rfqs as any[]).forEach((rfq: any) => {
@@ -134,7 +141,8 @@ export default function AnalyticsPage() {
 
   const stats = useMemo(() => {
     const totalSpend = filteredPos.reduce((s, po) => s + (po.totalAmount || 0), 0);
-    const activeVendors = allVendors.filter((v) => v.status === "ACTIVE").length;
+    const activeVendors = serverStats?.activeVendors
+      ?? allVendors.filter((v) => v.status === "ACTIVE").length;
 
     // YoY growth: compare filtered period to same-length period prior
     const now = new Date();
@@ -153,8 +161,16 @@ export default function AnalyticsPage() {
       .reduce((s, po) => s + (po.totalAmount || 0), 0);
     const yoy = prevSpend > 0 ? Math.round(((currentSpend - prevSpend) / prevSpend) * 1000) / 10 : 0;
 
-    return { totalSpend, totalOrders: filteredPos.length, activeVendors, yoy };
-  }, [filteredPos, allPos, allVendors, dateRange]);
+    // For "all time" view, prefer server-aggregated totals (cached, accurate even beyond 200-item page)
+    const resolvedSpend = dateRange === "all" && serverStats?.totalApprovedSpend != null
+      ? serverStats.totalApprovedSpend
+      : totalSpend;
+    const resolvedOrders = dateRange === "all" && serverStats?.totalPOs != null
+      ? serverStats.totalPOs
+      : filteredPos.length;
+
+    return { totalSpend: resolvedSpend, totalOrders: resolvedOrders, activeVendors, yoy };
+  }, [filteredPos, allPos, allVendors, dateRange, serverStats]);
 
   const spendData = useMemo(() => generateMonthlySpendData(filteredPos), [filteredPos]);
   const vendorData = useMemo(() => generateVendorSpendData(filteredPos, vendorMap), [filteredPos, vendorMap]);
@@ -192,7 +208,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
           {/* Header */}

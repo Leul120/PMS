@@ -88,6 +88,7 @@ public class DataInitializer implements CommandLineRunner {
                                  String phone, String address, String taxId,
                                  VendorCategory category, String complianceStatus, Long userId) {
         Vendor v = new Vendor();
+        v.setTenantId(1L);
         v.setCompanyName(companyName);
         v.setContactPerson(contactPerson);
         v.setEmail(email);
@@ -104,10 +105,13 @@ public class DataInitializer implements CommandLineRunner {
                                 LocalDate issued, LocalDate expires, String status,
                                 LocalDateTime uploadedAt, String uploadedBy) {
         VendorDocument d = new VendorDocument();
+        d.setTenantId(1L);
         d.setVendor(vendor);
         d.setDocumentType(type);
         d.setDocumentName(name);
-        d.setFileUrl("https://docs.procurement.internal/vendors/" + vendor.getVendorId() + "/" + urlSuffix);
+        d.setOriginalFilename(urlSuffix);
+        d.setContentType("application/pdf");
+        d.setFileContent(new byte[0]); // seed data placeholder — no actual file content
         d.setIssueDate(issued);
         d.setExpiryDate(expires);
         d.setStatus(status);

@@ -105,3 +105,80 @@ spec:
                 name: analytics-service
                 port:
                   number: 8087
+          - path: /api/dashboard
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-service
+                port:
+                  number: 8087
+          - path: /api/reports
+            pathType: Prefix
+            backend:
+              service:
+                name: analytics-service
+                port:
+                  number: 8087
+          - path: /api/procurement
+            pathType: Prefix
+            backend:
+              service:
+                name: procurement-service
+                port:
+                  number: 8084
+          - path: /api/threewaymatch
+            pathType: Prefix
+            backend:
+              service:
+                name: delivery-invoice-service
+                port:
+                  number: 8085
+          - path: /api/disputes
+            pathType: Prefix
+            backend:
+              service:
+                name: delivery-invoice-service
+                port:
+                  number: 8085
+          - path: /api/inventory
+            pathType: Prefix
+            backend:
+              service:
+                name: inventory-service
+                port:
+                  number: 8088
+          - path: /api/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 8089
+          - path: /api/admin
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8081
+          - path: /api/super-admin
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8081
+          - path: /kafka-ui
+            pathType: Prefix
+            backend:
+              service:
+                name: kafka-ui
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

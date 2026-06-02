@@ -4,6 +4,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,6 +30,8 @@ public class VendorClient {
     }
 
     /** Returns the company name for a vendor, or a safe fallback if the service is unavailable. */
+    @Cacheable(value = "vendorNames", key = "#vendorId",
+               unless = "#result == null || #result.startsWith('Vendor #')")
     public String getVendorName(Long vendorId) {
         if (vendorId == null) return null;
         try {

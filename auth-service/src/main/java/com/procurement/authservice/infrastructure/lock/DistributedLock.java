@@ -8,6 +8,15 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Distributed locking annotation - Auth Service specific.
+ *
+ * <p><b>Lock-ordering discipline.</b> This annotation is intentionally NOT
+ * {@code @Repeatable}: a method may hold at most ONE distributed lock. That
+ * structurally rules out the A&rarr;B / B&rarr;A circular wait that causes
+ * deadlocks. If a workflow must guard several resources, acquire a single
+ * coarser-grained lock rather than nesting locks. The same rule applies to
+ * database row locks (e.g. {@code SELECT ... FOR UPDATE}): take at most one
+ * per transaction, or — if several are unavoidable — always in ascending
+ * primary-key order.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)

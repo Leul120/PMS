@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,11 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: "Manager",
   AUDITOR: "Auditor",
   VENDOR: "Vendor",
+  VENDOR_ADMIN: "Vendor Admin",
+  VENDOR_SALES: "Sales Representative",
+  VENDOR_FINANCE: "Finance / Invoicing",
+  DIRECTOR: "Director",
+  SUPER_ADMIN: "Super Administrator",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -27,16 +33,34 @@ const ROLE_COLORS: Record<string, string> = {
   MANAGER: "bg-blue-100 text-blue-800",
   AUDITOR: "bg-purple-100 text-purple-800",
   VENDOR: "bg-orange-100 text-orange-800",
+  VENDOR_ADMIN: "bg-orange-100 text-orange-800",
+  VENDOR_SALES: "bg-amber-100 text-amber-800",
+  VENDOR_FINANCE: "bg-yellow-100 text-yellow-800",
+  DIRECTOR: "bg-indigo-100 text-indigo-800",
+  SUPER_ADMIN: "bg-rose-100 text-rose-800",
 };
 
 export default function ProfilePage() {
   const { user, setAuth, token } = useAuthStore();
   const { toast } = useToast();
 
-  const [firstName, setFirstName] = useState(user?.firstName || "");
-  const [lastName, setLastName] = useState(user?.lastName || "");
+  // Parse firstName/lastName from fullName if the store only has fullName
+  const parsedFirst = user?.firstName || (user?.fullName || "").split(" ")[0] || "";
+  const parsedLast = user?.lastName || (user?.fullName || "").split(" ").slice(1).join(" ") || "";
+
+  const [firstName, setFirstName] = useState(parsedFirst);
+  const [lastName, setLastName] = useState(parsedLast);
+  const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Load phone number from backend since it's not stored in the auth store
+  useEffect(() => {
+    authApi.getMe().then((me: any) => {
+      if (me?.phoneNumber) setPhone(me.phoneNumber);
+      if (me?.email) setEmail(me.email);
+    }).catch(() => {});
+  }, []);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -46,7 +70,7 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   const role = user?.role || user?.roleName || "VENDOR";
-  const initials = ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U";
+  const initials = ((parsedFirst?.[0] || "") + (parsedLast?.[0] || "")).toUpperCase() || "U";
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -56,15 +80,16 @@ export default function ProfilePage() {
       const updated = await authApi.updateUser(user.userId || user.id, {
         fullName: `${firstName} ${lastName}`.trim(),
         phoneNumber: phone || undefined,
+        email: email || undefined,
       });
-      // Update local auth store with new name
-      if (token) {
+      if (token && user) {
         setAuth(
           {
             ...user,
             firstName,
             lastName,
             fullName: `${firstName} ${lastName}`.trim(),
+            email: email || user.email,
           },
           token
         );
@@ -93,11 +118,7 @@ export default function ProfilePage() {
     }
     setSavingPassword(true);
     try {
-      // Use the update user endpoint with new password
-      await authApi.updateUser(user?.userId || user?.id || "", {
-        currentPassword,
-        newPassword,
-      });
+      await authApi.changePassword(currentPassword, newPassword);
       toast({ title: "Password changed", description: "Your password has been updated." });
       setCurrentPassword("");
       setNewPassword("");
@@ -114,7 +135,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR", "VENDOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "VENDOR_ADMIN", "VENDOR_SALES", "VENDOR_FINANCE", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4 max-w-2xl">
           <div>
@@ -181,12 +202,12 @@ export default function ProfilePage() {
                     <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <Input
                       id="email"
-                      value={user?.email || ""}
-                      disabled
-                      className="h-8 text-xs border-gray-200 pl-8 bg-gray-50 text-gray-500"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-8 text-xs border-gray-200 pl-8"
                     />
                   </div>
-                  <p className="text-[10px] text-gray-400">Email cannot be changed. Contact an admin if needed.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -222,7 +243,10 @@ export default function ProfilePage() {
             <div className="p-4">
               <form onSubmit={handleChangePassword} className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="currentPassword" className="text-xs">Current Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="currentPassword" className="text-xs">Current Password</Label>
+                    <Link href="/forgot-password" className="text-[10px] text-primary hover:underline">Forgot password?</Link>
+                  </div>
                   <div className="relative">
                     <Input
                       id="currentPassword"

@@ -22,6 +22,11 @@ services:
     volumes:
       - redis-auth-data:/data
     command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - procurement-network
 
@@ -247,17 +252,30 @@ services:
       - ANALYTICS_SERVICE_URL=http://analytics-service:8087
       - INVENTORY_SERVICE_URL=http://inventory-service:8088
       - NOTIFICATION_SERVICE_URL=http://notification-service:8089
+      # Same Redis as auth-service (JWT blacklist + user revocation keys)
+      - REDIS_HOST=redis-auth
+      - REDIS_PORT=6379
     depends_on:
-      - redis
-      - auth-service
-      - vendor-service
-      - rfq-bidding-service
-      - procurement-service
-      - delivery-invoice-service
-      - scoring-service
-      - analytics-service
-      - inventory-service
-      - notification-service
+      redis-auth:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      vendor-service:
+        condition: service_started
+      rfq-bidding-service:
+        condition: service_started
+      procurement-service:
+        condition: service_started
+      delivery-invoice-service:
+        condition: service_started
+      scoring-service:
+        condition: service_started
+      analytics-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
     networks:
       - procurement-network
 
@@ -534,6 +552,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=secret
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - REDIS_HOST=redis-notification
       - REDIS_PORT=6379
       - NOTIFICATION_SERVICE_URL=http://notification-service:8089

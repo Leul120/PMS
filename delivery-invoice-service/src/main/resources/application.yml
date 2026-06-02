@@ -6,10 +6,12 @@ spring:
       enabled: true
   application:
     name: delivery-invoice-service
+  transaction:
+    default-timeout: 30
   datasource:
-    url: jdbc:postgresql://localhost:5436/deliverydb
-    username: postgres
-    password: secret
+    url: ${DB_URL:jdbc:postgresql://localhost:5436/deliverydb}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:secret}
     hikari:
       maximum-pool-size: 15
       minimum-idle: 3
@@ -19,7 +21,7 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -32,6 +34,9 @@ spring:
         max.in.flight.requests.per.connection: 1
     consumer:
       group-id: delivery-service-group
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "com.procurement.*,java.util.*"
     listener:
       missing-topics-fatal: false
   data:
@@ -53,6 +58,8 @@ services:
     url: ${AUTH_SERVICE_URL:http://localhost:8081}
   procurement:
     url: ${PROCUREMENT_SERVICE_URL:http://localhost:8084}
+  vendor:
+    url: ${VENDOR_SERVICE_URL:http://localhost:8082}
 
 jwt:
   secret: ${JWT_SECRET:procurement-default-secret-key-change-in-production-min32chars}
@@ -70,6 +77,8 @@ resilience4j:
       authService:
         baseConfig: default
       procurementService:
+        baseConfig: default
+      vendorService:
         baseConfig: default
 
 

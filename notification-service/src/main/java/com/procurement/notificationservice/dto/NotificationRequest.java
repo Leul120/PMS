@@ -6,6 +6,8 @@ import lombok.Data;
 
 @Data
 public class NotificationRequest {
+    private Long tenantId;
+
     @NotNull
     private Long userId;
     
@@ -21,4 +23,5 @@ public class NotificationRequest {
     private String category; // BID_DEADLINE, APPROVAL_PENDING, etc.
 
     private String relatedEntityId;
+    private String actionUrl;
 }

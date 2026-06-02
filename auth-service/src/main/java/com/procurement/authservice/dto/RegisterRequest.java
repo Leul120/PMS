@@ -9,17 +9,23 @@ import lombok.Data;
 public class RegisterRequest {
     @NotBlank
     private String fullName;
-    
+
     @NotBlank
     @Email
     private String email;
-    
+
     @NotBlank
-    @Size(min = 6, max = 20)
+    @Size(min = 8, max = 20)
     private String password;
-    
+
     private String phoneNumber;
-    
+
     @NotBlank
     private String roleName;
+
+    /** Optional tenant domain; defaults to the default tenant if omitted. */
+    private String tenantDomain;
+
+    /** Company name — required for vendor self-registration */
+    private String companyName;
 }

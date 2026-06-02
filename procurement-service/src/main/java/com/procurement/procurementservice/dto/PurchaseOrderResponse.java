@@ -31,4 +31,6 @@ public class PurchaseOrderResponse {
     private LocalDate deliveryDate;
     private Long approvedBy;
     private LocalDate approvalDate;
+    private Long requisitionId;
+    private Long bidId;
 }

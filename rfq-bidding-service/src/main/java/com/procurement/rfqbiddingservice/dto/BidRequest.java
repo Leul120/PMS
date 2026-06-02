@@ -1,5 +1,6 @@
 package com.procurement.rfqbiddingservice.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -20,5 +21,6 @@ public class BidRequest {
     
     private String proposalText;
     
+    @Min(1)
     private Integer deliveryDays;
 }

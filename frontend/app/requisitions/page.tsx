@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +12,17 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import Link from "next/link";
 import { requisitionApi } from "@/lib/api";
+import { ProcurementPipelineBanner } from "@/components/procurement-pipeline-banner";
 import { useToast } from "@/hooks/use-toast";
 import { RequisitionDialog } from "./requisition-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { RequireRole } from "@/components/require-role";
+import { useListDeepLink } from "@/hooks/use-list-deep-link";
 import { useAuthStore } from "@/lib/auth-store";
 import {
-  Search, Plus, Loader2, ClipboardList, Clock, CheckCircle2, XCircle, AlertCircle,
+  Search, Plus, Loader2, ClipboardList, Clock, CheckCircle2, XCircle, AlertCircle, Gavel,
 } from "lucide-react";
 
 interface Requisition {
@@ -31,6 +34,21 @@ interface Requisition {
   status: string;
   currentApprovalLevel: number;
   createdAt: string;
+  requesterId?: number;
+  items?: Array<{
+    itemName: string;
+    description?: string;
+    quantity: number;
+    unit?: string;
+    estimatedUnitPrice: number;
+    category?: string;
+  }>;
+}
+
+function requiredRoleForLevel(level: number): string {
+  if (level >= 3) return "ADMIN";
+  if (level === 2) return "DIRECTOR";
+  return "MANAGER";
 }
 
 function daysAgo(dateStr: string) {
@@ -43,6 +61,7 @@ function daysAgo(dateStr: string) {
 
 function formatStatus(status: string) {
   switch (status) {
+    case "DRAFT": return "Draft";
     case "PENDING_APPROVAL": return "Pending Approval";
     case "APPROVED": return "Approved";
     case "REJECTED": return "Rejected";
@@ -55,12 +74,15 @@ export default function RequisitionsPage() {
   const [filteredRequisitions, setFilteredRequisitions] = useState<Requisition[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"APPROVED" | "REJECTED">("APPROVED");
   const [actionReq, setActionReq] = useState<Requisition | null>(null);
   const [actionComments, setActionComments] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [detailReq, setDetailReq] = useState<Requisition | null>(null);
+  const [submitLoading, setSubmitLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -68,13 +90,21 @@ export default function RequisitionsPage() {
   const { toast } = useToast();
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const hasRole = useAuthStore((state) => state.hasRole);
+  const user = useAuthStore((state) => state.user);
   const canCreate = hasPermission("requisitions:create");
   const canApprove = hasPermission("requisitions:approve");
+  const canCreateRfq = hasPermission("rfq:create");
+  const userRole = user?.role || user?.roleName;
 
-  async function loadRequisitions(page = 0) {
+  const loadRequisitions = useCallback(async (page = 0) => {
     try {
       setLoading(true);
-      const response = await requisitionApi.getAll(page, PAGE_SIZE);
+      const response = await requisitionApi.getAll({
+        page,
+        size: PAGE_SIZE,
+        search: debouncedSearch,
+        sort: "date-desc",
+      });
       const items = response.content ?? [];
       setRequisitions(items);
       setFilteredRequisitions(items);
@@ -89,29 +119,24 @@ export default function RequisitionsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [debouncedSearch, toast]);
 
   useEffect(() => {
-    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "AUDITOR"])) return;
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "SUPER_ADMIN"])) return;
+    setCurrentPage(0);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    if (!hasRole(["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "SUPER_ADMIN"])) return;
     loadRequisitions(currentPage);
-  }, [currentPage]);
+  }, [currentPage, loadRequisitions]);
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredRequisitions(requisitions);
-    } else {
-      const q = searchQuery.toLowerCase();
-      setFilteredRequisitions(
-        requisitions.filter(
-          (r) =>
-            r.requisitionNumber?.toLowerCase().includes(q) ||
-            r.department?.toLowerCase().includes(q) ||
-            r.justification?.toLowerCase().includes(q) ||
-            r.status?.toLowerCase().includes(q)
-        )
-      );
-    }
-  }, [searchQuery, requisitions]);
+  useListDeepLink(requisitions, loading, (req) => { openDetail(req); }, { paramNames: ["id"] });
 
   function openActionDialog(req: Requisition, type: "APPROVED" | "REJECTED") {
     setActionReq(req);
@@ -145,7 +170,34 @@ export default function RequisitionsPage() {
     }
   }
 
+  async function openDetail(req: Requisition) {
+    try {
+      const full = await requisitionApi.getById(req.requisitionId);
+      setDetailReq(full);
+    } catch {
+      setDetailReq(req);
+    }
+  }
+
+  async function handleSubmitDraft(req: Requisition) {
+    try {
+      setSubmitLoading(req.requisitionId);
+      await requisitionApi.submit(req.requisitionId);
+      toast({ title: "Submitted", description: `${req.requisitionNumber} sent for approval.` });
+      loadRequisitions(currentPage);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to submit requisition",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitLoading(null);
+    }
+  }
+
   const pendingReqs = requisitions.filter((r) => r.status === "PENDING_APPROVAL");
+  const draftReqs = requisitions.filter((r) => r.status === "DRAFT");
   const approvedReqs = requisitions.filter((r) => r.status === "APPROVED");
   const rejectedReqs = requisitions.filter((r) => r.status === "REJECTED");
   const totalBudget = approvedReqs.reduce((s, r) => s + (r.estimatedBudget || 0), 0);
@@ -178,9 +230,10 @@ export default function RequisitionsPage() {
   ];
 
   return (
-    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "AUDITOR"]}>
+    <RequireRole allowedRoles={["ADMIN", "OFFICER", "MANAGER", "DIRECTOR", "AUDITOR", "REQUESTER", "SUPER_ADMIN"]}>
       <DashboardLayout>
         <div className="space-y-4">
+          <ProcurementPipelineBanner activeStep="requisition" />
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
@@ -211,13 +264,22 @@ export default function RequisitionsPage() {
           </div>
 
           {/* Pending attention banner */}
-          {!loading && pendingReqs.length > 0 && canApprove && (
+          {!loading && pendingReqs.filter((r) =>
+            userRole === requiredRoleForLevel(r.currentApprovalLevel) || userRole === "SUPER_ADMIN"
+          ).length > 0 && canApprove && (
             <div className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 flex items-center gap-3">
               <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-              <p className="text-xs text-amber-800">
-                <span className="font-semibold">{pendingReqs.length} requisition{pendingReqs.length > 1 ? "s" : ""}</span> waiting for your approval — totalling{" "}
-                <span className="font-semibold">${pendingReqs.reduce((s, r) => s + (r.estimatedBudget || 0), 0).toLocaleString()}</span>.
-              </p>
+              {(() => {
+                const actionable = pendingReqs.filter((r) =>
+                  userRole === requiredRoleForLevel(r.currentApprovalLevel) || userRole === "SUPER_ADMIN"
+                );
+                return (
+                  <p className="text-xs text-amber-800">
+                    <span className="font-semibold">{actionable.length} requisition{actionable.length > 1 ? "s" : ""}</span> waiting for your approval — totalling{" "}
+                    <span className="font-semibold">${actionable.reduce((s, r) => s + (r.estimatedBudget || 0), 0).toLocaleString()}</span>.
+                  </p>
+                );
+              })()}
             </div>
           )}
 
@@ -249,19 +311,19 @@ export default function RequisitionsPage() {
                     <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Budget</TableHead>
                     <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status</TableHead>
                     <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Submitted</TableHead>
-                    {canApprove && <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Actions</TableHead>}
+                    {(canApprove || canCreateRfq) && <TableHead className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={canApprove ? 7 : 6} className="text-center py-10">
+                      <TableCell colSpan={(canApprove || canCreateRfq) ? 7 : 6} className="text-center py-10">
                         <Loader2 className="h-5 w-5 animate-spin mx-auto text-gray-400" />
                       </TableCell>
                     </TableRow>
                   ) : filteredRequisitions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={canApprove ? 7 : 6} className="text-center py-12">
+                      <TableCell colSpan={(canApprove || canCreateRfq) ? 7 : 6} className="text-center py-12">
                         <ClipboardList className="h-8 w-8 text-gray-300 mx-auto mb-3" />
                         <p className="text-sm font-medium text-gray-600">
                           {searchQuery ? "No requisitions match your search" : "No requisitions yet"}
@@ -282,7 +344,7 @@ export default function RequisitionsPage() {
                     </TableRow>
                   ) : (
                     filteredRequisitions.map((req) => (
-                      <TableRow key={req.requisitionId} className="hover:bg-gray-50 transition-colors">
+                      <TableRow key={req.requisitionId} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => openDetail(req)}>
                         <TableCell className="text-xs font-medium font-mono">{req.requisitionNumber}</TableCell>
                         <TableCell className="text-xs text-gray-700">{req.department || "—"}</TableCell>
                         <TableCell className="text-xs text-gray-600 max-w-[220px]">
@@ -297,6 +359,7 @@ export default function RequisitionsPage() {
                           {(() => {
                             const cls = req.status === "APPROVED" ? "bg-emerald-100 text-emerald-700"
                               : req.status === "PENDING_APPROVAL" ? "bg-amber-100 text-amber-700"
+                              : req.status === "DRAFT" ? "bg-blue-100 text-blue-700"
                               : req.status === "REJECTED" ? "bg-red-100 text-red-700"
                               : "bg-gray-100 text-gray-600";
                             return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{formatStatus(req.status)}</span>;
@@ -305,9 +368,11 @@ export default function RequisitionsPage() {
                         <TableCell className="text-xs text-gray-500">
                           <span title={new Date(req.createdAt).toLocaleString()}>{daysAgo(req.createdAt)}</span>
                         </TableCell>
-                        {canApprove && (
-                          <TableCell>
-                            {req.status === "PENDING_APPROVAL" ? (
+                        {(canApprove || canCreateRfq) && (
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {req.status === "PENDING_APPROVAL" &&
+                            canApprove &&
+                            (userRole === requiredRoleForLevel(req.currentApprovalLevel) || userRole === "SUPER_ADMIN") ? (
                               <div className="flex gap-1.5">
                                 <Button
                                   size="sm"
@@ -325,6 +390,27 @@ export default function RequisitionsPage() {
                                   Approve
                                 </Button>
                               </div>
+                            ) : req.status === "DRAFT" && canCreate ? (
+                              <Button
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                disabled={submitLoading === req.requisitionId}
+                                onClick={() => handleSubmitDraft(req)}
+                              >
+                                {submitLoading === req.requisitionId && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                Submit for Approval
+                              </Button>
+                            ) : req.status === "APPROVED" && canCreateRfq ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px] border-blue-200 text-blue-600 hover:bg-blue-50"
+                                asChild
+                              >
+                                <Link href={`/rfq?requisitionId=${req.requisitionId}`}>
+                                  <Gavel className="h-3 w-3 mr-1" />Create RFQ
+                                </Link>
+                              </Button>
                             ) : (
                               <span className="text-[10px] text-gray-400">—</span>
                             )}
@@ -353,6 +439,59 @@ export default function RequisitionsPage() {
           onSuccess={() => loadRequisitions(currentPage)}
         />
 
+        {/* Requisition Detail Dialog */}
+        <Dialog open={!!detailReq} onOpenChange={(o) => !o && setDetailReq(null)}>
+          <DialogContent className="sm:max-w-[480px] rounded">
+            <DialogHeader>
+              <DialogTitle className="text-sm">{detailReq?.requisitionNumber}</DialogTitle>
+              <DialogDescription className="text-xs">Purchase Requisition Details</DialogDescription>
+            </DialogHeader>
+            {detailReq && (
+              <div className="space-y-3 py-1 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><p className="text-gray-500">Department</p><p className="font-medium mt-0.5">{detailReq.department || "—"}</p></div>
+                  <div><p className="text-gray-500">Status</p>
+                    {(() => {
+                      const cls = detailReq.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : detailReq.status === "PENDING_APPROVAL" ? "bg-amber-100 text-amber-700" : detailReq.status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600";
+                      return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${cls}`}>{formatStatus(detailReq.status)}</span>;
+                    })()}
+                  </div>
+                  <div><p className="text-gray-500">Estimated Budget</p><p className="font-semibold text-base mt-0.5">${detailReq.estimatedBudget?.toLocaleString()}</p></div>
+                  <div><p className="text-gray-500">Submitted</p><p className="font-medium mt-0.5">{daysAgo(detailReq.createdAt)}</p></div>
+                  <div><p className="text-gray-500">Date</p><p className="font-medium mt-0.5">{new Date(detailReq.createdAt).toLocaleDateString()}</p></div>
+                  <div><p className="text-gray-500">Approval Level</p><p className="font-medium mt-0.5">{detailReq.currentApprovalLevel}</p></div>
+                </div>
+                {detailReq.justification && (
+                  <div><p className="text-gray-500 mb-0.5">Justification</p><p className="text-gray-700">{detailReq.justification}</p></div>
+                )}
+                {detailReq.items && detailReq.items.length > 0 && (
+                  <div>
+                    <p className="text-gray-500 mb-1">Line Items</p>
+                    <div className="border rounded divide-y">
+                      {detailReq.items.map((item, idx) => (
+                        <div key={idx} className="px-2 py-1.5 flex justify-between gap-2">
+                          <span>{item.itemName} × {item.quantity}{item.unit ? ` ${item.unit}` : ""}</span>
+                          <span className="font-medium">${((item.estimatedUnitPrice || 0) * (item.quantity || 0)).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter className="gap-2 sm:gap-0">
+              {detailReq?.status === "APPROVED" && canCreateRfq && (
+                <Button size="sm" className="text-xs" asChild>
+                  <Link href={`/rfq?requisitionId=${detailReq.requisitionId}`} onClick={() => setDetailReq(null)}>
+                    Create RFQ
+                  </Link>
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setDetailReq(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Approve / Reject confirmation dialog */}
         <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
           <DialogContent className="sm:max-w-[440px] rounded">
@@ -362,7 +501,7 @@ export default function RequisitionsPage() {
               </DialogTitle>
               <DialogDescription className="text-xs">
                 {actionType === "APPROVED"
-                  ? `You are approving ${actionReq?.requisitionNumber} for $${actionReq?.estimatedBudget?.toLocaleString()}. This will allow a purchase order to be created.`
+                  ? `You are approving ${actionReq?.requisitionNumber} for $${actionReq?.estimatedBudget?.toLocaleString()}. Procurement can then issue an RFQ and award a vendor.`
                   : `You are rejecting ${actionReq?.requisitionNumber}. The requester will be notified.`}
               </DialogDescription>
             </DialogHeader>

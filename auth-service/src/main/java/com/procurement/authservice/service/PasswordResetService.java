@@ -4,6 +4,7 @@ import com.procurement.authservice.entity.PasswordResetToken;
 import com.procurement.authservice.entity.User;
 import com.procurement.authservice.repository.PasswordResetTokenRepository;
 import com.procurement.authservice.repository.UserRepository;
+import com.procurement.authservice.security.TokenBlacklistService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +25,7 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TokenBlacklistService tokenBlacklistService;
     private final AuditLogService auditLogService;
     private final JavaMailSender mailSender;
 
@@ -35,14 +37,15 @@ public class PasswordResetService {
 
     /**
      * Initiates the forgot-password flow.
+     * Sends a reset token to every tenant-account that shares this email.
      * Always returns success to avoid user enumeration attacks.
      */
     @Transactional
     public void forgotPassword(String email) {
-        userRepository.findByEmail(email).ifPresent(user -> {
-            // Invalidate any existing tokens for this user
-            tokenRepository.deleteExpiredAndUsedTokens(LocalDateTime.now());
+        tokenRepository.deleteExpiredAndUsedTokens(LocalDateTime.now());
 
+        // Same email may exist in multiple tenants — send a reset link for each account
+        userRepository.findAllByEmail(email).forEach(user -> {
             String token = UUID.randomUUID().toString();
             PasswordResetToken resetToken = new PasswordResetToken();
             resetToken.setToken(token);
@@ -84,8 +87,9 @@ public class PasswordResetService {
         user.setLockTime(null);
         userRepository.save(user);
 
-        resetToken.setUsed(true);
-        tokenRepository.save(resetToken);
+        tokenBlacklistService.revokeUserTokens(user.getUserId());
+
+        tokenRepository.delete(resetToken);
 
         auditLogService.logAction("RESET_PASSWORD", "User", user.getUserId().toString(),
                 "Password reset via token for: " + user.getEmail(), user.getUserId());
