@@ -55,8 +55,6 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # Environment files
-.env
-.env.local
 .env.*.local
 
 # IDE - IntelliJ IDEA
@@ -66,7 +64,6 @@ yarn-error.log*
 *.ipr
 
 # IDE - VS Code
-.vscode/
 *.code-workspace
 
 # IDE - Eclipse
@@ -131,3 +128,7 @@ application-dev.properties
 *.pem
 *.cert
 *.key
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat
